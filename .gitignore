@@ -1,0 +1,48 @@
+# Node.js / Next.js dependencies and build output
+next/node_modules/
+next/.next/
+next/out/
+next/build/
+
+# Yarn, pnpm, and other package manager files (if used in next/)
+next/.pnp.*
+next/.yarn/*
+!next/.yarn/patches
+!next/.yarn/plugins
+!next/.yarn/releases
+!next/.yarn/versions
+
+# Test coverage
+next/coverage/
+
+# Vercel deployment config
+next/.vercel
+
+# TypeScript build info
+next/*.tsbuildinfo
+next/next-env.d.ts
+
+# Environment files (if you want to ignore them)
+next/.env*
+
+# Miscellaneous system/editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Java / Spring (backend)
+backend/target/
+
+# Python
+pys/__pycache__/
+*.pyc
