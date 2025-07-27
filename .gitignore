@@ -25,6 +25,21 @@ next/next-env.d.ts
 # Environment files (if you want to ignore them)
 next/.env*
 
+# Docker and environment files
+.env
+.env.local
+.env.production
+.env.development
+env.local
+
+# Data migration files (temporary)
+data/
+*.sql
+
+# Setup scripts (one-time use)
+setup-env.ps1
+import-data.ps1
+
 # Miscellaneous system/editor files
 .DS_Store
 Thumbs.db
@@ -42,6 +57,7 @@ pnpm-debug.log*
 
 # Java / Spring (backend)
 backend/target/
+backend/src/main/resources/application.properties
 
 # Python
 pys/__pycache__/

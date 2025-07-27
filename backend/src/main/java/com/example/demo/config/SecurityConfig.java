@@ -57,6 +57,9 @@ public class SecurityConfig {
             // allow Spring Boot's error dispatch
             .requestMatchers("/error", "/error/**").permitAll()
 
+            // allow actuator endpoints for health checks
+            .requestMatchers("/actuator/**").permitAll()
+
             // everything else needs authentication
             .anyRequest().authenticated()
           )
