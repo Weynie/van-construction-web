@@ -2,6 +2,17 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
+// Add CSS for hiding scrollbars
+const scrollbarHideStyles = `
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
 export default function HomePage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -23,14 +34,29 @@ export default function HomePage() {
   const [sidebarWidth, setSidebarWidth] = useState(256); // 256px = w-64
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
+  
+  // Drag and drop state for tabs
+  const [draggedTab, setDraggedTab] = useState(null);
+  const [dragOverTab, setDragOverTab] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Tab scroll state
+  const [tabScrollLeft, setTabScrollLeft] = useState(0);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+  const tabContainerRef = useRef(null);
+  
+  // Testing state
+  const [testMode, setTestMode] = useState(false);
+  
   const [projects, setProjects] = useState([
     {
       id: 1,
-      name: 'Project Alpha',
+      name: 'Project 1',
       pages: [
         { 
           id: 1, 
-          name: 'Home Page',
+          name: 'Page 1',
           tabs: [
             { id: 1, name: 'Design Tables', type: 'Design Tables', active: true }
           ]
@@ -40,11 +66,11 @@ export default function HomePage() {
     },
     {
       id: 2,
-      name: 'Project Beta',
+      name: 'Project 2',
       pages: [
         { 
           id: 2, 
-          name: 'Dashboard',
+          name: 'Page 1',
           tabs: [
             { id: 2, name: 'Design Tables', type: 'Design Tables', active: true }
           ]
@@ -67,6 +93,87 @@ export default function HomePage() {
 
   // Add state for Flask API results
   const [seismicResult, setSeismicResult] = useState(null);
+
+  // Helper function to generate unique names with numbering
+  const generateUniqueName = (baseName, existingNames, isCopy = false) => {
+    if (isCopy) {
+      // For copied items, use "Copy", "Copy 2", "Copy 3" format
+      const copyPattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+Copy(?:\\s+(\\d+))?$`);
+      const existingCopies = existingNames.filter(name => copyPattern.test(name));
+      
+      if (existingCopies.length === 0) {
+        return `${baseName} Copy`;
+      }
+      
+      // Find the highest number used
+      let maxNumber = 0;
+      existingCopies.forEach(name => {
+        const match = name.match(copyPattern);
+        if (match[1]) {
+          maxNumber = Math.max(maxNumber, parseInt(match[1]));
+        } else {
+          maxNumber = Math.max(maxNumber, 1); // "Copy" without number is considered as 1
+        }
+      });
+      
+      return maxNumber === 1 ? `${baseName} Copy 2` : `${baseName} Copy ${maxNumber + 1}`;
+    } else {
+      // For new items, use "1", "2", "3" format
+      if (!existingNames.includes(baseName)) {
+        return baseName;
+      }
+      
+      let counter = 1;
+      let newName = `${baseName} ${counter}`;
+      
+      while (existingNames.includes(newName)) {
+        counter++;
+        newName = `${baseName} ${counter}`;
+      }
+      
+      return newName;
+    }
+  };
+
+  // Unified function to extract base name from any copied item
+  const extractBaseName = (name) => {
+    // Remove all "Copy" patterns and clean up
+    return name
+      .replace(/\s*\(Copy\)\s*\(Copy\)\s*$/, '')  // Remove double (Copy) (Copy)
+      .replace(/\s*\(Copy\)\s*$/, '')             // Remove single (Copy)
+      .replace(/\s*Copy\s*\d+\s*$/, '')           // Remove Copy N
+      .replace(/\s*Copy\s*$/, '')                 // Remove Copy
+      .trim();
+  };
+
+  // Unified copy function for all item types
+  const createCopy = (originalName, existingNames) => {
+    const baseName = extractBaseName(originalName);
+    return generateUniqueName(baseName, existingNames, true);
+  };
+
+  // Helper function to get all existing names of a specific type
+  const getExistingNames = (type, projectId = null, pageId = null) => {
+    switch (type) {
+      case 'project':
+        return projects.map(p => p.name);
+      case 'page':
+        if (projectId) {
+          const project = projects.find(p => p.id === projectId);
+          return project ? project.pages.map(p => p.name) : [];
+        }
+        return [];
+      case 'tab':
+        if (projectId && pageId) {
+          const project = projects.find(p => p.id === projectId);
+          const page = project?.pages.find(p => p.id === pageId);
+          return page ? page.tabs.map(t => t.name) : [];
+        }
+        return [];
+      default:
+        return [];
+    }
+  };
 
   // Add fetchSedimentTypes function
   const fetchSedimentTypes = async () => {
@@ -103,6 +210,169 @@ export default function HomePage() {
     setIsResizing(true);
   }, []);
 
+  // Drag and drop handlers for tabs
+  const handleTabDragStart = useCallback((e, tabId) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    setDraggedTab(tabId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', tabId.toString());
+  }, []);
+
+  const handleTabDragOver = useCallback((e, tabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedTab !== tabId) {
+      setDragOverTab(tabId);
+    }
+  }, [draggedTab]);
+
+  const handleTabDragEnter = useCallback((e, tabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedTab !== tabId) {
+      setDragOverTab(tabId);
+    }
+  }, [draggedTab]);
+
+  const handleTabDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTab(null);
+  }, []);
+
+  const handleTabDrop = useCallback((e, targetTabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedTab && draggedTab !== targetTabId) {
+      const { projectId, pageId } = selectedPage;
+      const updatedProjects = projects.map(project => {
+        if (project.id === projectId) {
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+              if (page.id === pageId) {
+                const tabs = [...page.tabs];
+                const draggedIndex = tabs.findIndex(tab => tab.id === draggedTab);
+                const targetIndex = tabs.findIndex(tab => tab.id === targetTabId);
+                
+                if (draggedIndex !== -1 && targetIndex !== -1) {
+                  const [draggedTabItem] = tabs.splice(draggedIndex, 1);
+                  tabs.splice(targetIndex, 0, draggedTabItem);
+                }
+                
+                return {
+                  ...page,
+                  tabs
+                };
+              }
+              return page;
+            })
+          };
+        }
+        return project;
+      });
+      setProjects(updatedProjects);
+    }
+    setIsDragging(false);
+    setDraggedTab(null);
+    setDragOverTab(null);
+  }, [draggedTab, selectedPage, projects]);
+
+  const handleTabDragEnd = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setDraggedTab(null);
+    setDragOverTab(null);
+  }, []);
+
+  // Tab scroll functions
+  const scrollTabsLeft = useCallback(() => {
+    if (tabContainerRef.current) {
+      const newScrollLeft = tabContainerRef.current.scrollLeft - 200;
+      tabContainerRef.current.scrollLeft = newScrollLeft;
+      setTabScrollLeft(newScrollLeft);
+    }
+  }, []);
+
+  const scrollTabsRight = useCallback(() => {
+    if (tabContainerRef.current) {
+      const newScrollLeft = tabContainerRef.current.scrollLeft + 200;
+      tabContainerRef.current.scrollLeft = newScrollLeft;
+      setTabScrollLeft(newScrollLeft);
+    }
+  }, []);
+
+  const checkScrollButtons = useCallback(() => {
+    if (tabContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = tabContainerRef.current;
+      const canScrollRight = scrollWidth > clientWidth;
+      const isAtEnd = scrollLeft >= scrollWidth - clientWidth - 1;
+      
+      console.log('Scroll check:', { 
+        scrollLeft, 
+        scrollWidth, 
+        clientWidth, 
+        canScrollRight,
+        isAtEnd,
+        showLeftArrow: scrollLeft > 0,
+        showRightArrow: canScrollRight && !isAtEnd
+      });
+      
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(canScrollRight && !isAtEnd);
+    }
+  }, []);
+
+  const handleTabScroll = useCallback(() => {
+    if (tabContainerRef.current) {
+      setTabScrollLeft(tabContainerRef.current.scrollLeft);
+      checkScrollButtons();
+    }
+  }, [checkScrollButtons]);
+
+  // Test function to create many tabs
+  const createTestTabs = () => {
+    const { projectId, pageId } = selectedPage;
+    const updatedProjects = projects.map(project => {
+      if (project.id === projectId) {
+        return {
+          ...project,
+          pages: project.pages.map(page => {
+            if (page.id === pageId) {
+              const newTabs = [];
+              for (let i = 1; i <= 15; i++) {
+                newTabs.push({
+                  id: Date.now() + i,
+                  name: `Test Tab ${i}`,
+                  type: 'Design Tables',
+                  active: i === 1
+                });
+              }
+              return {
+                ...page,
+                tabs: newTabs
+              };
+            }
+            return page;
+          })
+        };
+      }
+      return project;
+    });
+    setProjects(updatedProjects);
+    setTestMode(true);
+    
+    // Force scroll check after a delay to ensure DOM is updated
+    setTimeout(() => {
+      checkScrollButtons();
+      console.log('Test tabs created, checking scroll...');
+    }, 300);
+  };
+
   useEffect(() => {
     if (isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -114,6 +384,47 @@ export default function HomePage() {
       };
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  // Global drag end handler
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      setIsDragging(false);
+      setDraggedTab(null);
+      setDragOverTab(null);
+    };
+
+    document.addEventListener('dragend', handleGlobalDragEnd);
+    return () => {
+      document.removeEventListener('dragend', handleGlobalDragEnd);
+    };
+  }, []);
+
+  // Check scroll buttons when tabs change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkScrollButtons();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [projects, selectedPage, checkScrollButtons]);
+
+  // Additional scroll check on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setTimeout(() => checkScrollButtons(), 100);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [checkScrollButtons]);
+
+  // Force check scroll buttons when test tabs are created
+  useEffect(() => {
+    if (testMode) {
+      const timer = setTimeout(() => {
+        checkScrollButtons();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [testMode, checkScrollButtons]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -193,9 +504,13 @@ export default function HomePage() {
 
   // Project management functions
   const addProject = () => {
+    const existingNames = getExistingNames('project');
+    const baseName = 'Project';
+    const newName = generateUniqueName(baseName, existingNames);
+    
     const newProject = {
       id: Date.now(),
-      name: `New Project ${projects.length + 1}`,
+      name: newName,
       pages: [],
       expanded: false
     };
@@ -203,6 +518,10 @@ export default function HomePage() {
   };
 
   const addPage = (projectId) => {
+    const existingNames = getExistingNames('page', projectId);
+    const baseName = 'Page';
+    const newName = generateUniqueName(baseName, existingNames);
+    
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         const newPageId = Date.now();
@@ -210,7 +529,7 @@ export default function HomePage() {
           ...project,
           pages: [...project.pages, { 
             id: newPageId, 
-            name: `New Page ${project.pages.length + 1}`,
+            name: newName,
             tabs: [
               { id: Date.now(), name: 'Design Tables', type: 'Design Tables', active: true }
             ]
@@ -256,10 +575,12 @@ export default function HomePage() {
           setEditingItem({ type: 'project', id: projectId, name: project.name });
           break;
         case 'copy':
+          const existingProjectNames = getExistingNames('project');
+          const newProjectName = createCopy(project.name, existingProjectNames);
           const copiedProject = {
             ...project,
             id: Date.now(),
-            name: `${project.name} (Copy)`,
+            name: newProjectName,
             pages: project.pages.map(page => ({ ...page, id: Date.now() + Math.random() })),
             expanded: false
           };
@@ -282,11 +603,13 @@ export default function HomePage() {
           setEditingItem({ type: 'page', id: { projectId, pageId }, name: page.name });
           break;
         case 'copy':
+          const existingPageNames = getExistingNames('page', projectId);
+          const newPageName = createCopy(page.name, existingPageNames);
           const updatedProjects = projects.map(p => {
             if (p.id === projectId) {
               return {
                 ...p,
-                pages: [...p.pages, { ...page, id: Date.now(), name: `${page.name} (Copy)` }]
+                pages: [...p.pages, { ...page, id: Date.now(), name: newPageName }]
               };
             }
             return p;
@@ -315,6 +638,8 @@ export default function HomePage() {
       
       switch (action) {
         case 'copy':
+          const existingTabNames = getExistingNames('tab', projectId, pageId);
+          const newTabName = createCopy(tab.name, existingTabNames);
           const updatedProjects = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -324,7 +649,7 @@ export default function HomePage() {
                     const copiedTab = {
                       ...tab,
                       id: Date.now(),
-                      name: `${tab.name} (Copy)`,
+                      name: newTabName,
                       active: false
                     };
                     return {
@@ -383,6 +708,10 @@ export default function HomePage() {
   // Tab management functions
   const addTab = () => {
     const { projectId, pageId } = selectedPage;
+    const existingNames = getExistingNames('tab', projectId, pageId);
+    const baseName = 'Design Tables';
+    const newName = generateUniqueName(baseName, existingNames);
+    
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         return {
@@ -391,7 +720,7 @@ export default function HomePage() {
             if (page.id === pageId) {
               const newTab = {
                 id: Date.now(),
-                name: 'Design Tables',
+                name: newName,
                 type: 'Design Tables',
                 active: false
               };
@@ -480,7 +809,10 @@ export default function HomePage() {
                 ...page,
                 tabs: page.tabs.map(tab => {
                   if (tab.id === tabId) {
-                    return { ...tab, name: newType, type: newType };
+                    // Generate unique name for the new type
+                    const existingNames = getExistingNames('tab', projectId, pageId);
+                    const newName = generateUniqueName(newType, existingNames);
+                    return { ...tab, name: newName, type: newType };
                   }
                   return tab;
                 })
@@ -764,7 +1096,9 @@ export default function HomePage() {
 
   // Welcome page after authentication
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <>
+      <style dangerouslySetInnerHTML={{ __html: scrollbarHideStyles }} />
+      <div className="h-screen flex flex-col bg-gray-50">
       {/* Header Area */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         {/* Logo */}
@@ -780,6 +1114,7 @@ export default function HomePage() {
 
         {/* Right side - Language, Settings, Logout */}
         <div className="flex items-center space-x-4">
+          
           <button className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" title="Language">
             <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
@@ -808,7 +1143,7 @@ export default function HomePage() {
         {/* Project Sidebar */}
         <div 
           ref={sidebarRef}
-          className={`bg-white border-r border-gray-200 transition-all duration-300 relative ${sidebarCollapsed ? 'w-12' : ''}`}
+          className={`bg-white border-r border-gray-200 transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
           style={{ width: sidebarCollapsed ? '48px' : `${sidebarWidth}px` }}
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -956,12 +1291,30 @@ export default function HomePage() {
         </div>
 
         {/* Information Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Tab Bar */}
           <div className="bg-white border-b border-gray-200 flex items-center">
-            {/* Tabs */}
-            <div className="flex items-center border-b border-gray-200 bg-white">
-              <div className="flex-1 flex">
+            {/* Left scroll arrow - Fixed on left side */}
+            {showLeftArrow && (
+              <button
+                onClick={scrollTabsLeft}
+                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0 border-r border-gray-200 bg-white"
+                title="Scroll Left"
+              >
+                <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            
+            {/* Scrollable tabs container */}
+            <div className="flex-1 relative overflow-hidden min-w-0" style={{ maxWidth: 'calc(100vw - 400px)' }}>
+              <div
+                ref={tabContainerRef}
+                className="flex items-center bg-white overflow-x-auto scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                onScroll={handleTabScroll}
+              >
                 {(() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
@@ -972,18 +1325,49 @@ export default function HomePage() {
                       key={tab.id}
                       className={`flex items-center px-4 py-2 border-r border-gray-200 cursor-pointer group ${
                         tab.active ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-gray-50'
+                      } ${
+                        isDragging && draggedTab === tab.id ? 'opacity-50' : ''
+                      } ${
+                        dragOverTab === tab.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
                       }`}
-                      onClick={() => selectTab(tab.id)}
+                      style={{ 
+                        cursor: isDragging ? 'grabbing' : 'grab',
+                        minWidth: '180px',
+                        maxWidth: '180px',
+                        flexShrink: 0
+                      }}
+                      onClick={(e) => {
+                        if (!isDragging) {
+                          selectTab(tab.id);
+                        }
+                      }}
                       onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
+                      draggable={true}
+                      onDragStart={(e) => handleTabDragStart(e, tab.id)}
+                      onDragEnter={(e) => handleTabDragEnter(e, tab.id)}
+                      onDragOver={(e) => handleTabDragOver(e, tab.id)}
+                      onDragLeave={handleTabDragLeave}
+                      onDrop={(e) => handleTabDrop(e, tab.id)}
+                      onDragEnd={handleTabDragEnd}
                     >
-                      <span className="text-sm text-gray-700 mr-2">{tab.name}</span>
+                      <div className="flex items-center flex-1 min-w-0">
+                        <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                        <span 
+                          className="text-sm text-gray-700 truncate"
+                          title={tab.name}
+                        >
+                          {tab.name}
+                        </span>
+                      </div>
                       {currentTabs.length > 1 && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             closeTab(tab.id);
                           }}
-                          className="ml-2 p-1 rounded hover:bg-red-100 transition opacity-0 group-hover:opacity-100 bg-red-50"
+                          className="ml-2 p-1 rounded hover:bg-red-100 transition opacity-0 group-hover:opacity-100 bg-red-50 flex-shrink-0"
                           title="Close Tab"
                         >
                           <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -995,6 +1379,24 @@ export default function HomePage() {
                   ));
                 })()}
               </div>
+            </div>
+            
+            {/* Right scroll arrow - Fixed on right side */}
+            {showRightArrow && (
+              <button
+                onClick={scrollTabsRight}
+                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0 border-l border-gray-200 bg-white"
+                title="Scroll Right"
+              >
+                <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+            
+            {/* Fixed right side controls - always visible */}
+            <div className="flex items-center flex-shrink-0 bg-white border-l border-gray-200">
+              {/* Add Tab button */}
               <button
                 onClick={addTab}
                 className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-blue-100 transition bg-blue-50"
@@ -1405,6 +1807,7 @@ export default function HomePage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

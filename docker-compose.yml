@@ -49,12 +49,17 @@ services:
   frontend:
     build:
       context: ./next
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: construction_frontend
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./next:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       backend:
         condition: service_healthy
