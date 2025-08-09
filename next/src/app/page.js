@@ -94,6 +94,20 @@ export default function HomePage() {
   // Add state for Flask API results
   const [seismicResult, setSeismicResult] = useState(null);
 
+  // Add state for Snow Load and Wind Load data
+  const [snowLoadData, setSnowLoadData] = useState([]);
+  const [windLoadData, setWindLoadData] = useState([]);
+  const [loadingSnowData, setLoadingSnowData] = useState(false);
+  const [loadingWindData, setLoadingWindData] = useState(false);
+  const [snowLoadError, setSnowLoadError] = useState('');
+  const [windLoadError, setWindLoadError] = useState('');
+
+  // Add state for tab-specific Snow Load inputs
+  const [snowLoadTabData, setSnowLoadTabData] = useState({});
+
+  // Add state for tab-specific Wind Load inputs
+  const [windLoadTabData, setWindLoadTabData] = useState({});
+
   // Helper function to generate unique names with numbering
   const generateUniqueName = (baseName, existingNames, isCopy = false) => {
     if (isCopy) {
@@ -189,6 +203,40 @@ export default function HomePage() {
       setSedimentTypes([]);
     } finally {
       setLoadingSediments(false);
+    }
+  };
+
+  // Add function to fetch Snow Load data
+  const fetchSnowLoadData = async () => {
+    setLoadingSnowData(true);
+    setSnowLoadError("");
+    try {
+      const res = await fetch("http://localhost:8080/api/snow-load-values");
+      if (!res.ok) throw new Error("Failed to fetch snow load data");
+      const data = await res.json();
+      setSnowLoadData(data);
+    } catch (err) {
+      setSnowLoadError("Error fetching snow load data from backend.");
+      setSnowLoadData([]);
+    } finally {
+      setLoadingSnowData(false);
+    }
+  };
+
+  // Add function to fetch Wind Load data
+  const fetchWindLoadData = async () => {
+    setLoadingWindData(true);
+    setWindLoadError("");
+    try {
+      const res = await fetch("http://localhost:8080/api/wind-load-values");
+      if (!res.ok) throw new Error("Failed to fetch wind load data");
+      const data = await res.json();
+      setWindLoadData(data);
+    } catch (err) {
+      setWindLoadError("Error fetching wind load data from backend.");
+      setWindLoadData([]);
+    } finally {
+      setLoadingWindData(false);
     }
   };
 
@@ -1453,6 +1501,1063 @@ export default function HomePage() {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
                   const activeTab = currentPage?.tabs.find(t => t.active);
+                  
+                  if (activeTab?.type === 'Snow Load') {
+                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
+                    const snowDefaults = {
+                      location: 'North Vancouver',
+                      slope: 1,
+                      is: 1,
+                      ca: 1,
+                      cb: 0.8,
+                      cw: 1
+                    };
+                    const data = { ...snowDefaults, ...(snowLoadTabData[tabKey] || {}) };
+                    
+                    const handleSnowChange = (field, value) => {
+                      setSnowLoadTabData(prev => ({
+                        ...prev,
+                        [tabKey]: {
+                          ...prev[tabKey],
+                          [field]: value
+                        }
+                      }));
+                    };
+
+                    // Snow Drifting Load Calculator state and calculations
+                    const driftDefaults = {
+                      // General Input
+                      a: 1.0, // Horizontal gap between upper and lower roofs
+                      h: 5.0, // Difference in elevation between lower roof surface and top of the parapet of the upper roof
+                      hp_lower: 2.0, // Parapet height of lower-roof source area
+                      x: 3.0, // Optional: Point of interest
+                      
+                      // Case 1 Input
+                      ws_upper: 10.0, // Shorter dimension of (upper roof) source area in Case 1
+                      ls_upper: 15.0, // Longer dimension of (upper roof) source area in Case 1
+                      hp_upper: 1.0, // Parapet height of upper-roof source area in Case 1
+                      
+                      // Case 2 Input
+                      ws_lower2: 15.0, // Shorter dimension of (lower roof) source area in Case 2
+                      ls_lower2: 20.0, // Longer dimension of (lower roof) source area in Case 2
+                      
+                      // Case 3 Input
+                      ws_lower3: 15.0, // Shorter dimension of (lower roof) source area in Case 3
+                      ls_lower3: 25.0, // Longer dimension of (lower roof) source area in Case 3
+                      
+                      // Additional parameters needed for calculations
+                      Ss: 2.0, // Ground snow load (kPa)
+                      Sr: 0.0, // Rain load (kPa) - will be updated from location data
+                      γ: 3.0, // Snow density (kN/m³)
+                      Cb: 1.0, // Basic roof snow load factor
+                      Cs_default: 1.0, // Default slope factor
+                      Is: 1.0, // Importance factor
+                      Ca: 1.0, // Accumulation factor
+                      Cw: 1.0 // Wind factor
+                    };
+
+                    const driftData = { ...driftDefaults, ...(snowLoadTabData[tabKey] || {}) };
+                    
+                    // Sync drift inputs with current Snow Load table (B2–B18) for live updates
+                    const driftLocationData = snowLoadData.find(item => item.city === data.location);
+                    const ssLive = driftLocationData?.groundSnowLoadKpa ?? driftData.Ss;
+                    const srLive = driftLocationData?.rainSnowLoadKpa ?? driftData.Sr;
+                    const alphaLive = Math.atan((data.slope || 0) / 12) * (180 / Math.PI);
+                    const gammaLive = Math.min(4, 0.43 * ssLive + 2.2);
+                    const csLive = alphaLive <= 30 ? 1 : (alphaLive > 70 ? 0 : (70 - alphaLive) / 40);
+                    driftData.Ss = ssLive;            // B7
+                    driftData.Sr = srLive;            // B8
+                    driftData.γ = gammaLive;          // B10
+                    driftData.Cb = data.cb;           // B6
+                    driftData.Cw = data.cw;           // B12
+                    driftData.Cs_default = csLive;    // B13
+                    driftData.Is = data.is;           // B4
+                    // Keep an explicit field for display-only distribution table
+                    driftData.Ss_for_distribution = ssLive;
+
+                    const handleDriftChange = (field, value) => {
+                      setSnowLoadTabData(prev => ({
+                        ...prev,
+                        [tabKey]: {
+                          ...prev[tabKey],
+                          [field]: value
+                        }
+                      }));
+                    };
+
+                    // Case I Calculations
+                    const caseI_Ics = 2 * Math.min(driftData.ws_upper, driftData.ls_upper) - Math.pow(Math.min(driftData.ws_upper, driftData.ls_upper), 2) / Math.max(driftData.ws_upper, driftData.ls_upper);
+                    const caseI_hp_prime = Math.max(0, Math.min(driftData.hp_upper - 0.8 * driftData.Ss / driftData.γ, caseI_Ics / 5));
+                    const caseI_F = Math.min(0.35 * 1.00 * Math.sqrt(driftData.γ * (caseI_Ics - 5 * caseI_hp_prime) / driftData.Ss) + driftData.Cb, 5);
+                    const caseI_Ca0_1 = caseI_F / driftData.Cb;
+                    const caseI_Ca0_2 = 1.00 * driftData.γ * driftData.h / (driftData.Cb * driftData.Ss);
+                    const caseI_Ca0_I = (driftData.a > 5 || driftData.h <= 0.8 * driftData.Ss / driftData.γ) ? "NOT APPLICABLE" : Math.min(caseI_Ca0_1, caseI_Ca0_2);
+                    const caseI_xd_I = 5 * driftData.Cb * driftData.Ss / driftData.γ * (caseI_Ca0_I - 1);
+
+                    const caseI = {
+                      β: 1.00,
+                      Ics: caseI_Ics,
+                      Cw: 1.00,
+                      hp_prime: caseI_hp_prime,
+                      Cs: driftData.h > 0 ? 1 : driftData.Cs_default,
+                      F: caseI_F,
+                      Ca0_1: caseI_Ca0_1,
+                      Ca0_2: caseI_Ca0_2,
+                      Ca0_I: caseI_Ca0_I,
+                      xd_I: caseI_xd_I
+                    };
+
+                    // Case II Calculations
+                    const caseII_Ics = 2 * Math.min(driftData.ws_lower2, driftData.ls_lower2) - Math.pow(Math.min(driftData.ws_lower2, driftData.ls_lower2), 2) / Math.max(driftData.ws_lower2, driftData.ls_lower2);
+                    const caseII_hp_prime = Math.max(0, Math.min(driftData.hp_lower - 0.8 * driftData.Ss / driftData.γ, caseII_Ics / 5));
+                    const caseII_F = Math.min(0.35 * 0.67 * Math.sqrt(driftData.γ * (caseII_Ics - 5 * caseII_hp_prime) / driftData.Ss) + driftData.Cb, 5);
+                    const caseII_Ca0_1 = caseII_F / driftData.Cb;
+                    const caseII_Ca0_2 = 0.67 * driftData.γ * driftData.h / (driftData.Cb * driftData.Ss);
+                    const caseII_Ca0_II = (driftData.a > 5 || driftData.h <= 0.8 * driftData.Ss / driftData.γ) ? "NOT APPLICABLE" : Math.min(caseII_Ca0_1, caseII_Ca0_2);
+                    const caseII_xd_II = 5 * driftData.Cb * driftData.Ss / driftData.γ * (caseII_Ca0_II - 1);
+
+                    const caseII = {
+                      β: 0.67,
+                      Ics: caseII_Ics,
+                      Cw: 1.00,
+                      hp_prime: caseII_hp_prime,
+                      Cs: driftData.h > 0 ? 1 : driftData.Cs_default,
+                      F: caseII_F,
+                      Ca0_1: caseII_Ca0_1,
+                      Ca0_2: caseII_Ca0_2,
+                      Ca0_II: caseII_Ca0_II,
+                      xd_II: caseII_xd_II
+                    };
+
+                    // Case III Calculations
+                    const caseIII_Ics = 2 * Math.min(driftData.ws_lower3, driftData.ls_lower3) - Math.pow(Math.min(driftData.ws_lower3, driftData.ls_lower3), 2) / Math.max(driftData.ws_lower3, driftData.ls_lower3);
+                    const caseIII_hp_prime = Math.max(0, Math.min(driftData.hp_lower - 0.8 * driftData.Ss / driftData.γ, caseIII_Ics / 5));
+                    const caseIII_F = Math.min(0.35 * 0.67 * Math.sqrt(driftData.γ * (caseIII_Ics - 5 * caseIII_hp_prime) / driftData.Ss) + driftData.Cb, 5);
+                    const caseIII_Ca0_1 = caseIII_F / driftData.Cb;
+                    const caseIII_Ca0_2 = 0.67 * driftData.γ * driftData.h / (driftData.Cb * driftData.Ss);
+                    const caseIII_Ca0_III = (driftData.a > 5 || driftData.h <= 0.8 * driftData.Ss / driftData.γ) ? "NOT APPLICABLE" : Math.min(caseIII_Ca0_1, caseIII_Ca0_2);
+                    const caseIII_xd_III = 5 * driftData.Cb * driftData.Ss / driftData.γ * (caseIII_Ca0_III - 1);
+
+                    const caseIII = {
+                      β: 0.67,
+                      Ics: caseIII_Ics,
+                      Cw: 1.00,
+                      hp_prime: caseIII_hp_prime,
+                      Cs: driftData.h > 0 ? 1 : driftData.Cs_default,
+                      F: caseIII_F,
+                      Ca0_1: caseIII_Ca0_1,
+                      Ca0_2: caseIII_Ca0_2,
+                      Ca0_III: caseIII_Ca0_III,
+                      xd_III: caseIII_xd_III
+                    };
+
+                    // Load snow data if not loaded
+                    if (snowLoadData.length === 0 && !loadingSnowData) {
+                      fetchSnowLoadData();
+                    }
+
+                    // Find location data
+                    const snowLocationData = snowLoadData.find(item => item.city === data.location);
+                    const ss = snowLocationData?.groundSnowLoadKpa || 0;
+                    const sr = snowLocationData?.rainSnowLoadKpa || 0;
+
+                    // Calculations
+                    const alpha = Math.atan(data.slope / 12) * (180 / Math.PI);
+                    const gamma = Math.min(4, 0.43 * ss + 2.2);
+                    const limitHeight = 1 + ss / gamma;
+                    const cs = alpha <= 30 ? 1 : (alpha > 70 ? 0 : (70 - alpha) / 40);
+                    const ssCombined = ss * data.cb * data.cw * cs * data.ca;
+                    const snowLoad = data.is * (ssCombined + Math.min(sr, ssCombined));
+                    const snowLoadPsf = snowLoad * 20.88543;
+                    const snowLoadPart9 = Math.max(0.55 * ss + sr, 1);
+                    const snowLoadPart9Psf = snowLoadPart9 * 20.88543;
+
+                    return (
+                      <>
+                        <div className="max-w-4xl mx-auto bg-blue-50 rounded-lg p-6 border border-blue-200">
+                        <h3 className="text-xl font-bold text-blue-800 mb-4">Snow Load Calculator 1.0 (ULS)</h3>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {/* Input Area */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-blue-700 mb-3">Input Area</h4>
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Location</label>
+                                <select 
+                                  className="col-span-2 px-2 py-1 border rounded text-sm"
+                                  value={data.location}
+                                  onChange={e => handleSnowChange('location', e.target.value)}
+                                >
+                                  {snowLoadData.map(item => (
+                                    <option key={item.id} value={item.city}>{item.city}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Slope</label>
+                                <input 
+                                  type="number" 
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.slope}
+                                  onChange={e => handleSnowChange('slope', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-sm">: 12</span>
+                              </div>
+
+                              <div>
+                                <h4 className="font-semibold text-blue-700 mb-3">Default Inputs</h4>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Is</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.is}
+                                  onChange={e => handleSnowChange('is', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">normal=1; SLS → 0.9</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Ca</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.ca}
+                                  onChange={e => handleSnowChange('ca', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">Ca = 1 for simple cases; complicated when consider particular situations</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Cb</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.cb}
+                                  onChange={e => handleSnowChange('cb', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">(1) Cb=0.8 if smaller dimension of roof w≤35m (115'); (2) Cb=1.0 if roof height ≤ Limit. Height ≈ 2m (6.5'); (3) Otherwise, refer to the Code.</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Cw</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.cw}
+                                  onChange={e => handleSnowChange('cw', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">Conservative</span>
+                              </div>
+                            </div>
+                            
+                            {snowLoadError && (
+                              <div className="mt-3 text-red-600 text-sm">{snowLoadError}</div>
+                            )}
+                          </div>
+
+                          {/* Calculation Area */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-green-700 mb-3">Calculation Area</h4>
+                            <div className="space-y-0">
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Ss</span>
+                                <span className="font-mono">{ss.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">1-in-50-year ground snow load</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Sr</span>
+                                <span className="font-mono">{sr.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">1-in-50-year associated rain load</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">α</span>
+                                <span className="font-mono">{alpha.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">°</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">γ</span>
+                                <span className="font-mono">{gamma.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">γ=min.&#123;4.0 kN/m³, 0.43Ss+2.2 kN/m³&#125;</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Limit. Height</span>
+                                <span className="font-mono">{limitHeight.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">= 1 + Ss/γ (m); if a mean height of roof is less than 1 + Ss/γ → Cb=1.</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Cw</span>
+                                <span className="font-mono">{Number(data.cw).toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">Conservative</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Cs</span>
+                                <span className="font-mono">{cs.toFixed(2)}</span>
+                                <span className="text-xs text-gray-600">Cs=1.0 where α≤30°; (70°-α)/40° where 30°&lt;α≤70°; 0 where α&gt;70°</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium">Ss(CbCwCsCa)</span>
+                                <span className="font-mono">{ssCombined.toFixed(2)}</span>
+                                <span></span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Results */}
+                                                  <div className="mt-6 bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                          <h4 className="font-semibold text-yellow-800 mb-3">Results</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="grid grid-cols-3 gap-2">
+                              <span className="font-medium">Snow loads</span>
+                              <span className="font-mono">{snowLoad.toFixed(2)} kPa</span>
+                              <span className="font-mono">{snowLoadPsf.toFixed(1)} psf</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <span className="font-medium">Snow loads (Part 9)</span>
+                              <span className="font-mono">{snowLoadPart9.toFixed(2)} kPa</span>
+                              <span className="font-mono">{snowLoadPart9Psf.toFixed(1)} psf</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Snow Drifting Load Calculator (Multi-level Roofs) 1.0 */}
+                      <div className="mt-8 max-w-6xl mx-auto bg-purple-50 rounded-lg p-6 border border-purple-200">
+                        <h3 className="text-xl font-bold text-purple-800 mb-4">Snow Drifting Load Calculator (Multi-level Roofs) 1.0</h3>
+                        
+                        <div className="grid grid-cols-1 gap-6">
+                          {/* Part 1: Inputs */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-purple-700 mb-3">Part 1: Inputs</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <div className="space-y-3">
+                                <h5 className="font-medium text-purple-600">General Input</h5>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">a (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="1.0"
+                                    value={driftData.a}
+                                    onChange={(e) => handleDriftChange('a', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Horizontal gap between upper and lower roofs</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">h (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="5.0"
+                                    value={driftData.h}
+                                    onChange={(e) => handleDriftChange('h', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Difference in elevation between lower roof surface and top of the parapet of the upper roof</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">hp_lower (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="2.0"
+                                    value={driftData.hp_lower}
+                                    onChange={(e) => handleDriftChange('hp_lower', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">parapet height of lower-roof source area</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">x (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="3.0"
+                                    value={driftData.x}
+                                    onChange={(e) => handleDriftChange('x', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Optional: Point of interest</span>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <h5 className="font-medium text-purple-600">Case 1 Input</h5>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ws_upper (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="10.0"
+                                    value={driftData.ws_upper}
+                                    onChange={(e) => handleDriftChange('ws_upper', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Shorter dimension of (upper roof) source area in Case 1</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ls_upper (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="15.0"
+                                    value={driftData.ls_upper}
+                                    onChange={(e) => handleDriftChange('ls_upper', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Longer dimension of (upper roof) source area in Case 1</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">hp_upper (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="1.0"
+                                    value={driftData.hp_upper}
+                                    onChange={(e) => handleDriftChange('hp_upper', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">parapet height of upper-roof source area in Case 1</span>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <h5 className="font-medium text-purple-600">Case 2 & 3 Input</h5>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ws_lower2 (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="15.0"
+                                    value={driftData.ws_lower2}
+                                    onChange={(e) => handleDriftChange('ws_lower2', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Shorter dimension of (lower roof) source area in Case 2</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ls_lower2 (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="20.0"
+                                    value={driftData.ls_lower2}
+                                    onChange={(e) => handleDriftChange('ls_lower2', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Longer dimension of (lower roof) source area in Case 2</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ws_lower3 (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="15.0"
+                                    value={driftData.ws_lower3}
+                                    onChange={(e) => handleDriftChange('ws_lower3', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Shorter dimension of (lower roof) source area in Case 3</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 items-center">
+                                  <label className="text-sm font-medium">ls_lower3 (m)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="px-2 py-1 border rounded text-sm"
+                                    placeholder="25.0"
+                                    value={driftData.ls_lower3}
+                                    onChange={(e) => handleDriftChange('ls_lower3', parseFloat(e.target.value) || 0)}
+                                  />
+                                  <span className="text-xs text-gray-600">Longer dimension of (lower roof) source area in Case 3</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Part 2-4: Unified Snow Drifting Load Results */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-purple-700 mb-3">Part 2-4: Snow Drifting Load Results</h4>
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse border border-gray-300">
+                                <thead>
+                                  <tr className="bg-purple-100">
+                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Parameter</th>
+                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I</th>
+                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II</th>
+                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">β</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.β.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.β.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.β.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ics</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ics.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ics.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ics.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Cw</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Cw.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Cw.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Cw.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">hp'</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.hp_prime.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.hp_prime.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.hp_prime.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Cs</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Cs.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Cs.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Cs.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">F</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.F.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.F.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.F.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0_1</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ca0_1.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ca0_1.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ca0_1.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0_2</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ca0_2.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ca0_2.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ca0_2.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseI.Ca0_I === 'string' ? caseI.Ca0_I : caseI.Ca0_I.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseII.Ca0_II === 'string' ? caseII.Ca0_II : caseII.Ca0_II.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseIII.Ca0_III === 'string' ? caseIII.Ca0_III : caseIII.Ca0_III.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">xd (m)</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.xd_I.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.xd_II.toFixed(2)}</td>
+                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.xd_III.toFixed(2)}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                            
+                            {/* Snow Load Distribution Table */}
+                            <div className="mt-6">
+                              <h5 className="font-semibold text-purple-600 mb-3">Snow Load Distribution</h5>
+                              <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-gray-300">
+                                  <thead>
+                                    <tr className="bg-purple-100">
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I Location x (ft)</th>
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I S (psf)</th>
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II Location x (ft)</th>
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II S (psf)</th>
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III Location x (ft)</th>
+                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III S (psf)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseI.Ca0_I === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseII.Ca0_II === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseIII.Ca0_III === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseI.xd_I * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
+                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseII.xd_II * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
+                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseIII.xd_III * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
+                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseI.Ca0_I === 'number' && (driftData.x * 3.28) <= (caseI.xd_I * 3.28) ? 
+                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
+                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
+                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                           (driftData.x * 3.28) / (caseI.xd_I * 3.28)).toFixed(1) : 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseII.Ca0_II === 'number' && (driftData.x * 3.28) <= (caseII.xd_II * 3.28) ? 
+                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
+                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
+                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                           (driftData.x * 3.28) / (caseII.xd_II * 3.28)).toFixed(1) : 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
+                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
+                                        {typeof caseIII.Ca0_III === 'number' && (driftData.x * 3.28) <= (caseIII.xd_III * 3.28) ? 
+                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
+                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
+                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                           (driftData.x * 3.28) / (caseIII.xd_III * 3.28)).toFixed(1) : 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      </>
+                    );
+                  }
+                  
+                  if (activeTab?.type === 'Wind Load') {
+                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
+                    const windDefaults = {
+                      location: 'Richmond',
+                      iw: 1,
+                      ce: 0.7,
+                      ct: 1,
+                      cgMain: 2,
+                      cgCladding: 2.5,
+                      cpWindward: 0.8,
+                      cpLeeward: -0.5,
+                      cpParallel: -0.7,
+                      cpRoof: -1,
+                      cpCladding: 0.9,
+                      cei: 0.7,
+                      cgi: 2,
+                      cpiMin: -0.45,
+                      cpiMax: 0.3
+                    };
+                    const data = { ...windDefaults, ...(windLoadTabData[tabKey] || {}) };
+                    
+                    const handleWindChange = (field, value) => {
+                      setWindLoadTabData(prev => ({
+                        ...prev,
+                        [tabKey]: {
+                          ...prev[tabKey],
+                          [field]: value
+                        }
+                      }));
+                    };
+
+                    // Load wind data if not loaded
+                    if (windLoadData.length === 0 && !loadingWindData) {
+                      fetchWindLoadData();
+                    }
+
+                    // Find location data
+                    const locationData = windLoadData.find(item => item.city === data.location);
+                    const q = locationData?.windPressureKpa || 0;
+
+                    // External Pressure Calculations: P = Iw * q * Ce * Ct * Cg * Cp
+                    const windwardSurface = data.iw * q * data.ce * data.ct * data.cgMain * data.cpWindward;
+                    const windwardSurfacePsf = windwardSurface * 20.88543;
+                    const leewardSurface = data.iw * q * data.ce * data.ct * data.cgMain * data.cpLeeward;
+                    const leewardSurfacePsf = leewardSurface * 20.88543;
+                    const parallelSurface = data.iw * q * data.ce * data.ct * data.cgMain * data.cpParallel;
+                    const parallelSurfacePsf = parallelSurface * 20.88543;
+                    const roofSurface = data.iw * q * data.ce * data.ct * data.cgMain * data.cpRoof;
+                    const roofSurfacePsf = roofSurface * 20.88543;
+                    // Cladding surface = B3*B6*B4*B5*B8*0.9 (using fixed value 0.9, not Cp_cladding variable)
+                    // Positive pressure (wind pushing against surface)
+                    const claddingSurfaceKpaPos = data.iw * q * data.ce * data.ct * data.cgCladding * 0.9;
+                    const claddingSurfacePsfPos = claddingSurfaceKpaPos * 20.88543;
+                    // Negative pressure (wind pulling away from surface)
+                    const claddingSurfaceKpaNeg = data.iw * q * data.ce * data.ct * data.cgCladding * (-0.9);
+                    const claddingSurfacePsfNeg = claddingSurfaceKpaNeg * 20.88543;
+
+                    // Internal Pressure Calculation: Pi = Iw * q * Cei * Cgi * Cpi
+                    const internalPressureMin = data.iw * q * data.cei * data.cgi * data.cpiMin;
+                    const internalPressureMinPsf = internalPressureMin * 20.88543;
+                    const internalPressureMax = data.iw * q * data.cei * data.cgi * data.cpiMax;
+                    const internalPressureMaxPsf = internalPressureMax * 20.88543;
+
+                    return (
+                      <div className="max-w-6xl mx-auto bg-green-50 rounded-lg p-6 border border-green-200">
+                        <h3 className="text-xl font-bold text-green-800 mb-4">Wind Load Calculator 1.0</h3>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {/* Input Area: Location only */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-green-700 mb-3">Input Area</h4>
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Location</label>
+                                <select 
+                                  className="col-span-2 px-2 py-1 border rounded text-sm"
+                                  value={data.location}
+                                  onChange={e => handleWindChange('location', e.target.value)}
+                                >
+                                  {windLoadData.map(item => (
+                                    <option key={item.id} value={item.city}>{item.city}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Default Inputs */}
+                          <div className="bg-white rounded-lg p-4">
+                            <h4 className="font-semibold text-green-700 mb-3">Default Inputs</h4>
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Iw</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.iw}
+                                  onChange={e => handleWindChange('iw', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">Importance Factor: normal(ULS)=1; SLS=0.8</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Ce</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.ce}
+                                  onChange={e => handleWindChange('ce', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">Exposure factor: (1) Ce=0.7, rough (suburban, urban or wooded terrain), H≤12m(39'); (2) Ce=0.9~1, open terrain, H≤12m(39')</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 items-center">
+                                <label className="text-sm font-medium">Ct</label>
+                                <input 
+                                  type="number" 
+                                  step="0.1"
+                                  className="px-2 py-1 border rounded text-sm"
+                                  value={data.ct}
+                                  onChange={e => handleWindChange('ct', parseFloat(e.target.value) || 0)}
+                                />
+                                <span className="text-xs text-gray-600">Topographic Factor: Ct=1 for normal, else for hill/slope (refer to Code)</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Calculation Area: from q to Cpi */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-blue-700 mb-3">Calculation Area</h4>
+                                                      <div className="space-y-0">
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">q</span><span className="font-mono">{q.toFixed(2)}</span><span className="text-xs text-gray-600">Hourly Wind Pressures kPa, 1/50</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cg_main</span><span className="font-mono">{data.cgMain}</span><span className="text-xs text-gray-600">Gust Effect Factor: Cg=2 for main structure</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cg_cladding</span><span className="font-mono">{data.cgCladding}</span><span className="text-xs text-gray-600">Gust Effect Factor: 2.5 for cladding</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp windward</span><span className="font-mono">{data.cpWindward}</span><span className="text-xs text-gray-600">External Pressure Coefficients: For normal buildings; Conservative Value (H/D≥1)</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp leeward</span><span className="font-mono">{data.cpLeeward}</span><span/>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp parallel</span><span className="font-mono">{data.cpParallel}</span><span/>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp roof</span><span className="font-mono">{data.cpRoof}</span><span/>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp cladding</span><span className="font-mono">±0.9</span><span className="text-xs text-gray-600">For walls, balcony guards → but not for the corner part</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cei</span><span className="font-mono">{data.cei}</span><span className="text-xs text-gray-600">Normally equal to Ce; 0.7, rough, H≤12m(39')</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cgi</span><span className="font-mono">{data.cgi}</span><span className="text-xs text-gray-600">Internal Gust Effect Factor: Cgi=2</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cpi (min)</span><span className="font-mono">{data.cpiMin}</span><span className="text-xs text-gray-600">Internal Pressure Coefficient: Non-uniformly distributed openings of which none is significant or significant openings that are wind-resistant and closed during storms</span>
+                              </div>
+                              <hr className="border-gray-200" />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cpi (max)</span><span className="font-mono">{data.cpiMax}</span><span/>
+                              </div>
+                            </div>
+                        </div>
+
+                        {/* External Pressure Area */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-green-700 mb-3">External Pressure: P = Iw × q × Ce × Ct × Cg × Cp</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Surface</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Windward Surface</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{windwardSurface.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{windwardSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Leeward Surface</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{leewardSurface.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{leewardSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Parallel Surface</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{parallelSurface.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{parallelSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Roof Surface</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{roofSurface.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{roofSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Cladding Surface</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{claddingSurfaceKpaPos.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{claddingSurfacePsfPos.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Internal Pressure Area */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-green-700 mb-3">Internal Pressure: P = Iw × q × Cei × Ct × Cgi × Cpi</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Surface</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Surface Max.</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{internalPressureMax.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{internalPressureMaxPsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Surface Min.</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{internalPressureMin.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2"></td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{internalPressureMinPsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Main Structure */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-blue-700 mb-3">Main Structure (Whole Building)</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Max pressure</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{windwardSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">windward surface, Cp=0.8</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Max suction</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{parallelSurfacePsf.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">parallel surface, Cp=-0.7</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Roof</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(roofSurfacePsf - internalPressureMaxPsf).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">external roof + internal pressure, Cp= -1-0.3 = -1.3</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Windward Direction as a Whole</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(windwardSurfacePsf - leewardSurfacePsf).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">windward - leeward surface, Cp = 0.8 - (-0.5) = 1.3</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Components */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-purple-700 mb-3">Components</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Wall Cladding - Inward</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(claddingSurfacePsfPos - internalPressureMinPsf).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding pressure + internal suction, Cp = 0.9- (-0.45) =1.35</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Wall Cladding - Outward</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(claddingSurfacePsfNeg - internalPressureMaxPsf).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding suction + internal pressure, Cp = -0.9-0.3 = -1.2</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Balcony guards</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{claddingSurfacePsfPos.toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding pressure, Cp = 0.9</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Canopy */}
+                        <div className="mt-6 bg-white rounded-lg p-4">
+                          <h4 className="font-semibold text-orange-700 mb-3">Canopy</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
+                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Canopy (Positive Pressure)</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(data.iw * q * data.ce * data.ct * 1.5 * 20.88543).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">Attached Canopies on Low Buildings with a Height H ≤ 20 m: (1) Net gust pressure → Pnet = Iw × q × Ce × Ct × (CgCp)net; (2) + → downward, - → upward;</td>
+                                </tr>
+                                <tr>
+                                  <td className="border border-gray-300 px-3 py-2 font-medium">Canopy (Negative Pressure)</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(data.iw * q * data.ce * data.ct * (-3.2) * 20.88543).toFixed(2)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-sm">(3) Conservative value: (CgCp)net = 1.5(max.) / -3.2(min.)</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+
+                  
                   if (activeTab?.type === 'Seismic Template') {
                     // Unique key for this tab
                     const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
@@ -1699,6 +2804,7 @@ export default function HomePage() {
                       </div>
                     );
                   }
+                  
                   // Default content for other tabs
                   return (
                     <>

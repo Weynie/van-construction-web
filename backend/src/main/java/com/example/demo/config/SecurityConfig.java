@@ -48,8 +48,12 @@ public class SecurityConfig {
               "/api/users/login/**"
             ).permitAll()
 
-            // allow GET to sediment types endpoint
-            .requestMatchers(HttpMethod.GET, "/api/sediment-types", "/api/sediment-types/**").permitAll()
+            // allow GET to public data endpoints
+            .requestMatchers(HttpMethod.GET,
+              "/api/sediment-types", "/api/sediment-types/**",
+              "/api/snow-load-values", "/api/snow-load-values/**",
+              "/api/wind-load-values", "/api/wind-load-values/**"
+            ).permitAll()
 
             // allow OPTIONS on everything (for CORS preflight)
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
