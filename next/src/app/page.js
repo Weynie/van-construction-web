@@ -58,7 +58,7 @@ export default function HomePage() {
           id: 1, 
           name: 'Page 1',
           tabs: [
-            { id: 1, name: 'Design Tables', type: 'Design Tables', active: true }
+            { id: 1, name: 'Welcome', type: 'Welcome', active: true }
           ]
         }
       ],
@@ -72,7 +72,7 @@ export default function HomePage() {
           id: 2, 
           name: 'Page 1',
           tabs: [
-            { id: 2, name: 'Design Tables', type: 'Design Tables', active: true }
+            { id: 2, name: 'Welcome', type: 'Welcome', active: true }
           ]
         }
       ],
@@ -98,6 +98,14 @@ export default function HomePage() {
   const [snowLoadData, setSnowLoadData] = useState([]);
   const [windLoadData, setWindLoadData] = useState([]);
   const [loadingSnowData, setLoadingSnowData] = useState(false);
+  
+  // Add state for tab dropdown menu
+  const [showTabDropdown, setShowTabDropdown] = useState(false);
+  
+  // Add state for dropdown drag and drop
+  const [dropdownDraggedTab, setDropdownDraggedTab] = useState(null);
+  const [dropdownDragOverTab, setDropdownDragOverTab] = useState(null);
+  const [isDropdownDragging, setIsDropdownDragging] = useState(false);
   const [loadingWindData, setLoadingWindData] = useState(false);
   const [snowLoadError, setSnowLoadError] = useState('');
   const [windLoadError, setWindLoadError] = useState('');
@@ -475,18 +483,21 @@ export default function HomePage() {
   }, [testMode, checkScrollButtons]);
 
   // Close context menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (contextMenu.show) {
-        setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
-      }
-    };
+  const handleClickOutside = useCallback((event) => {
+    if (contextMenu.show) {
+      setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
+    }
+    if (showTabDropdown) {
+      setShowTabDropdown(false);
+    }
+  }, [contextMenu.show, showTabDropdown]);
 
+  useEffect(() => {
     document.addEventListener('click', handleClickOutside);
     return () => {
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [contextMenu.show]);
+  }, [handleClickOutside]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -579,7 +590,7 @@ export default function HomePage() {
             id: newPageId, 
             name: newName,
             tabs: [
-              { id: Date.now(), name: 'Design Tables', type: 'Design Tables', active: true }
+              { id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }
             ]
           }]
         };
@@ -713,6 +724,202 @@ export default function HomePage() {
           });
           setProjects(updatedProjects);
           break;
+        case 'newTabRight':
+          // Create new tab to the right of current tab
+          const existingTabNamesRight = getExistingNames('tab', projectId, pageId);
+          const newTabNameRight = generateUniqueName('Design Tables', existingTabNamesRight);
+          const newTabRight = {
+            id: Date.now(),
+            name: newTabNameRight,
+            type: 'Design Tables',
+            active: false
+          };
+          const updatedProjectsRight = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    const tabIndex = pa.tabs.findIndex(t => t.id === tabId);
+                    const newTabs = [...pa.tabs];
+                    newTabs.splice(tabIndex + 1, 0, newTabRight);
+                    return {
+                      ...pa,
+                      tabs: newTabs
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsRight);
+          break;
+        case 'lockTab':
+          // Lock the tab
+          const updatedProjectsLock = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    return {
+                      ...pa,
+                      tabs: pa.tabs.map(t => {
+                        if (t.id === tabId) {
+                          return { ...t, locked: true };
+                        }
+                        return t;
+                      })
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsLock);
+          break;
+        case 'unlockTab':
+          // Unlock the tab
+          const updatedProjectsUnlock = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    return {
+                      ...pa,
+                      tabs: pa.tabs.map(t => {
+                        if (t.id === tabId) {
+                          return { ...t, locked: false };
+                        }
+                        return t;
+                      })
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsUnlock);
+          break;
+        case 'moveToStart':
+          // Move tab to the beginning
+          const updatedProjectsStart = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    const currentTabs = [...pa.tabs];
+                    const tabIndex = currentTabs.findIndex(t => t.id === tabId);
+                    if (tabIndex > 0) {
+                      const [movedTab] = currentTabs.splice(tabIndex, 1);
+                      currentTabs.unshift(movedTab);
+                    }
+                    return {
+                      ...pa,
+                      tabs: currentTabs
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsStart);
+          break;
+        case 'moveToEnd':
+          // Move tab to the end
+          const updatedProjectsEnd = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    const currentTabs = [...pa.tabs];
+                    const tabIndex = currentTabs.findIndex(t => t.id === tabId);
+                    if (tabIndex >= 0 && tabIndex < currentTabs.length - 1) {
+                      const [movedTab] = currentTabs.splice(tabIndex, 1);
+                      currentTabs.push(movedTab);
+                    }
+                    return {
+                      ...pa,
+                      tabs: currentTabs
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsEnd);
+          break;
+        case 'closeOthers':
+          // Close all other tabs except the current one and locked tabs
+          const updatedProjectsCloseOthers = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    const remainingTabs = pa.tabs.filter(t => t.id === tabId || t.locked);
+                    // If no tabs remain, create a welcome tab
+                    if (remainingTabs.length === 0) {
+                      return {
+                        ...pa,
+                        tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
+                      };
+                    }
+                    return {
+                      ...pa,
+                      tabs: remainingTabs
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsCloseOthers);
+          break;
+        case 'closeAll':
+          // Close all tabs except locked ones, create welcome tab if none left
+          const updatedProjectsCloseAll = projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                pages: p.pages.map(pa => {
+                  if (pa.id === pageId) {
+                    const lockedTabs = pa.tabs.filter(t => t.locked);
+                    // If no locked tabs remain, create a welcome tab
+                    if (lockedTabs.length === 0) {
+                      return {
+                        ...pa,
+                        tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
+                      };
+                    }
+                    return {
+                      ...pa,
+                      tabs: lockedTabs
+                    };
+                  }
+                  return pa;
+                })
+              };
+            }
+            return p;
+          });
+          setProjects(updatedProjectsCloseAll);
+          break;
       }
     }
     
@@ -794,10 +1001,24 @@ export default function HomePage() {
           ...project,
           pages: project.pages.map(page => {
             if (page.id === pageId) {
+              // Check if the tab is locked
+              const tabToClose = page.tabs.find(tab => tab.id === tabId);
+              if (tabToClose && tabToClose.locked) {
+                return page; // Don't close locked tabs
+              }
+              
               if (page.tabs.length > 1) {
+                const remainingTabs = page.tabs.filter(tab => tab.id !== tabId);
+                // If no tabs left after closing, create a welcome tab
+                if (remainingTabs.length === 0) {
+                  return {
+                    ...page,
+                    tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
+                  };
+                }
                 return {
                   ...page,
-                  tabs: page.tabs.filter(tab => tab.id !== tabId)
+                  tabs: remainingTabs
                 };
               }
             }
@@ -873,6 +1094,81 @@ export default function HomePage() {
       return project;
     });
     setProjects(updatedProjects);
+  };
+
+  // Dropdown drag and drop handlers
+  const handleDropdownDragStart = (e, tabId) => {
+    e.stopPropagation();
+    setDropdownDraggedTab(tabId);
+    setIsDropdownDragging(true);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDropdownDragEnter = (e, tabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropdownDraggedTab !== tabId) {
+      setDropdownDragOverTab(tabId);
+    }
+  };
+
+  const handleDropdownDragOver = (e, tabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropdownDraggedTab !== tabId) {
+      setDropdownDragOverTab(tabId);
+    }
+  };
+
+  const handleDropdownDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropdownDragOverTab(null);
+  };
+
+  const handleDropdownDrop = (e, targetTabId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (dropdownDraggedTab && dropdownDraggedTab !== targetTabId) {
+      const updatedProjects = projects.map(project => {
+        if (project.id === selectedPage.projectId) {
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+              if (page.id === selectedPage.pageId) {
+                const currentTabs = [...page.tabs];
+                const draggedTabIndex = currentTabs.findIndex(tab => tab.id === dropdownDraggedTab);
+                const targetTabIndex = currentTabs.findIndex(tab => tab.id === targetTabId);
+                
+                if (draggedTabIndex !== -1 && targetTabIndex !== -1) {
+                  const [draggedTab] = currentTabs.splice(draggedTabIndex, 1);
+                  currentTabs.splice(targetTabIndex, 0, draggedTab);
+                }
+                
+                return {
+                  ...page,
+                  tabs: currentTabs
+                };
+              }
+              return page;
+            })
+          };
+        }
+        return project;
+      });
+      setProjects(updatedProjects);
+    }
+    
+    setDropdownDraggedTab(null);
+    setDropdownDragOverTab(null);
+    setIsDropdownDragging(false);
+  };
+
+  const handleDropdownDragEnd = () => {
+    setDropdownDraggedTab(null);
+    setDropdownDragOverTab(null);
+    setIsDropdownDragging(false);
   };
 
   // If not authenticated, show login form
@@ -1377,6 +1673,8 @@ export default function HomePage() {
                         isDragging && draggedTab === tab.id ? 'opacity-50' : ''
                       } ${
                         dragOverTab === tab.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
+                      } ${
+                        tab.locked ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : ''
                       }`}
                       style={{ 
                         cursor: isDragging ? 'grabbing' : 'grab',
@@ -1409,7 +1707,7 @@ export default function HomePage() {
                           {tab.name}
                         </span>
                       </div>
-                      {currentTabs.length > 1 && (
+                      {currentTabs.length > 1 && !tab.locked && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1422,6 +1720,13 @@ export default function HomePage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
+                      )}
+                      {tab.locked && (
+                        <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
+                          <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
                       )}
                     </div>
                   ));
@@ -1442,9 +1747,108 @@ export default function HomePage() {
               </button>
             )}
             
-            {/* Fixed right side controls - always visible */}
-            <div className="flex items-center flex-shrink-0 bg-white border-l border-gray-200">
-              {/* Add Tab button */}
+            {/* Fixed right side controls - positioned at far right edge */}
+            <div className="flex items-center flex-shrink-0 bg-white border-l border-gray-200 ml-auto">
+              {/* Tab Dropdown button */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowTabDropdown(!showTabDropdown);
+                  }}
+                  className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+                  title="Tab Menu"
+                >
+                  <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {/* Dropdown Menu - Right-aligned to dropdown button */}
+                {showTabDropdown && (
+                  <div 
+                    className="absolute top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+                    style={{ 
+                      right: '0',
+                      transform: 'translateX(0)',
+                      width: '280px',
+                      backgroundColor: '#ffffff',
+                      backdropFilter: 'none'
+                    }}
+                  >
+                    <div className="py-1 bg-white">
+                      <div className="px-3 py-1 text-xs font-normal text-gray-200 uppercase tracking-wider border-b border-gray-100 bg-white">
+                        Current tabs
+                      </div>
+                      {(() => {
+                        const currentProject = projects.find(p => p.id === selectedPage.projectId);
+                        const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
+                        const currentTabs = currentPage?.tabs || [];
+                        
+                        return currentTabs.map(tab => (
+                          <div
+                            key={tab.id}
+                            className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer ${
+                              isDropdownDragging && dropdownDraggedTab === tab.id ? 'opacity-50' : ''
+                            } ${
+                              dropdownDragOverTab === tab.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
+                            }`}
+                            style={{ 
+                              cursor: isDropdownDragging ? 'grabbing' : 'grab'
+                            }}
+                            onClick={() => {
+                              if (!isDropdownDragging) {
+                                selectTab(tab.id);
+                                setShowTabDropdown(false);
+                              }
+                            }}
+                            draggable={true}
+                            onDragStart={(e) => handleDropdownDragStart(e, tab.id)}
+                            onDragEnter={(e) => handleDropdownDragEnter(e, tab.id)}
+                            onDragOver={(e) => handleDropdownDragOver(e, tab.id)}
+                            onDragLeave={handleDropdownDragLeave}
+                            onDrop={(e) => handleDropdownDrop(e, tab.id)}
+                            onDragEnd={handleDropdownDragEnd}
+                          >
+                            <div className="flex items-center flex-1 min-w-0">
+                              <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                              </svg>
+                              <span className="text-sm text-gray-700 truncate" title={tab.name}>
+                                {tab.name}
+                              </span>
+                            </div>
+                            {currentTabs.length > 1 && !tab.locked && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  closeTab(tab.id);
+                                  setShowTabDropdown(false);
+                                }}
+                                className="ml-2 p-1 rounded hover:bg-red-100 transition"
+                                title="Close Tab"
+                              >
+                                <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                            {tab.locked && (
+                              <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
+                                <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Add Tab button - Fixed on far right */}
               <button
                 onClick={addTab}
                 className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-blue-100 transition bg-blue-50"
@@ -2808,8 +3212,17 @@ export default function HomePage() {
                   // Default content for other tabs
                   return (
                     <>
-                      <p>Welcome to the {activeTab?.name || 'Design Tables'} workspace.</p>
-                      <p className="mt-2">This is where you can manage your project information and calculations.</p>
+                      {activeTab?.type === 'Welcome' ? (
+                        <>
+                          <p>Welcome to your new workspace!</p>
+                          <p className="mt-2">This is a blank canvas where you can start creating your project. Use the "+" button to add new tabs and begin your work.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>Welcome to the {activeTab?.name || 'Design Tables'} workspace.</p>
+                          <p className="mt-2">This is where you can manage your project information and calculations.</p>
+                        </>
+                      )}
                     </>
                   );
                 })()}
@@ -2908,6 +3321,90 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <span>Copy</span>
+              </button>
+              
+              <div className="border-t border-gray-200 my-1"></div>
+              
+              <button
+                onClick={() => handleContextMenuAction('newTabRight')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>New Tab to the Right</span>
+              </button>
+              
+              {(() => {
+                const { projectId, pageId } = selectedPage;
+                const project = projects.find(p => p.id === projectId);
+                const page = project?.pages.find(p => p.id === pageId);
+                const tab = page?.tabs.find(t => t.id === contextMenu.itemId);
+                return tab?.locked ? (
+                  <button
+                    onClick={() => handleContextMenuAction('unlockTab')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                    </svg>
+                    <span>Unlock Tab</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleContextMenuAction('lockTab')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Lock Tab</span>
+                  </button>
+                );
+              })()}
+              
+              <div className="border-t border-gray-200 my-1"></div>
+              
+              <button
+                onClick={() => handleContextMenuAction('moveToStart')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+                <span>Move to Start</span>
+              </button>
+              
+              <button
+                onClick={() => handleContextMenuAction('moveToEnd')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+                <span>Move to End</span>
+              </button>
+              
+              <div className="border-t border-gray-200 my-1"></div>
+              
+              <button
+                onClick={() => handleContextMenuAction('closeOthers')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Close Other Tabs</span>
+              </button>
+              
+              <button
+                onClick={() => handleContextMenuAction('closeAll')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Close All Tabs</span>
               </button>
             </>
           )}
