@@ -27,9 +27,9 @@ public class UserController {
     @Autowired
     private JwtUtil jwtUtil;
 
-    // at least 6 chars, one uppercase and one digit
+    // at least 8 chars, one uppercase and one digit
     private static final Pattern PASSWORD_PATTERN =
-        Pattern.compile("^(?=.*[A-Z])(?=.*[0-9]).{6,}$");
+        Pattern.compile("^(?=.*[A-Z])(?=.*[0-9]).{8,}$");
 
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody Map<String, String> body) {
@@ -54,13 +54,13 @@ public class UserController {
             if (!PASSWORD_PATTERN.matcher(password).matches()) {
                 return ResponseEntity
                     .badRequest()
-                    .body("Password must be ≥6 chars, include an uppercase letter and a number.");
+                    .body("Password must be at least 8 characters with at least one uppercase letter and one number.");
             }
 
             if (userRepository.findByEmail(email).isPresent()) {
                 return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body("Email already registered.");
+                    .body("Registration failed. Try another email or password.");
             }
 
             User user = new User();
@@ -112,7 +112,7 @@ public class UserController {
 
             return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
-                .body("Invalid credentials.");
+                .body("Invalid email or password.");
         } catch (Exception e) {
             System.err.println("Login error: " + e.getMessage());
             return ResponseEntity

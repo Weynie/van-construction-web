@@ -22,6 +22,10 @@ export default function HomePage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   const [isHovered, setIsHovered] = useState(false);
   
@@ -502,18 +506,6 @@ export default function HomePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!email || !password || (!isLogin && (!username || !confirmPassword))) {
-      setErrorMessage('Please fill in all fields.');
-      setShowErrorDialog(true);
-      return;
-    }
-
-    if (!isLogin && password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
-      setShowErrorDialog(true);
-      return;
-    }
-
     const endpoint = isLogin ? 'login' : 'register';
 
     try {
@@ -536,16 +528,37 @@ export default function HomePage() {
           setShowForm(false);
           setErrorMessage('');
         } else {
-          setErrorMessage('Registration successful! Please log in.');
+          setErrorMessage('Registration successful!');
           setShowErrorDialog(true);
           setIsLogin(true);
+          setEmail('');
+          setPassword('');
+          setConfirmPassword('');
+          setUsername('');
         }
         setEmail('');
         setPassword('');
         setConfirmPassword('');
       } else {
-        setErrorMessage(data.message || 'An error occurred.');
-        setShowErrorDialog(true);
+        if (isLogin) {
+          // For login errors, show as inline error on password field
+          setPasswordError(data.message || 'Invalid email or password.');
+        } else {
+          // For registration errors, show as inline errors based on the error type
+          const errorMessage = data.message || 'Please try another email and password.';
+          
+          if (errorMessage.includes('password') || errorMessage.includes('Password')) {
+            setPasswordError(errorMessage);
+          } else if (errorMessage.includes('username') || errorMessage.includes('Username')) {
+            setUsernameError(errorMessage);
+          } else if (errorMessage.includes('Registration failed') || errorMessage.includes('email') || errorMessage.includes('Email')) {
+            setPasswordError('Please try another email and password.');
+          } else {
+            // For other errors, show as dialog
+            setErrorMessage(errorMessage);
+            setShowErrorDialog(true);
+          }
+        }
       }
     } catch (err) {
       setErrorMessage('Server error. Please try again.');
@@ -1215,12 +1228,23 @@ export default function HomePage() {
                           type="text"
                           placeholder={(!focus.username && !username) ? 'Enter your username' : ''}
                           value={username}
-                          onChange={(e) => setUsername(e.target.value)}
-                          onFocus={() => setFocus(f => ({ ...f, username: true }))}
+                          onChange={(e) => {
+                            setUsername(e.target.value);
+                            if (usernameError) setUsernameError('');
+                          }}
+                          onFocus={() => {
+                            setFocus(f => ({ ...f, username: true }));
+                            if (usernameError) setUsernameError('');
+                          }}
                           onBlur={() => setFocus(f => ({ ...f, username: false }))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                           style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
                         />
+                        {usernameError && (
+                          <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                            {usernameError}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1234,12 +1258,23 @@ export default function HomePage() {
                         type="email"
                         placeholder={(!focus.email && !email) ? 'Enter your email' : ''}
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onFocus={() => setFocus(f => ({ ...f, email: true }))}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (emailError) setEmailError('');
+                        }}
+                        onFocus={() => {
+                          setFocus(f => ({ ...f, email: true }));
+                          if (emailError) setEmailError('');
+                        }}
                         onBlur={() => setFocus(f => ({ ...f, email: false }))}
                         className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                         style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
                       />
+                      {emailError && (
+                        <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                          {emailError}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1252,12 +1287,41 @@ export default function HomePage() {
                         type="password"
                         placeholder={(!focus.password && !password) ? 'Enter your password' : ''}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onFocus={() => setFocus(f => ({ ...f, password: true }))}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (passwordError) setPasswordError('');
+                        }}
+                        onFocus={() => {
+                          setFocus(f => ({ ...f, password: true }));
+                          if (passwordError) setPasswordError('');
+                        }}
                         onBlur={() => setFocus(f => ({ ...f, password: false }))}
                         className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                         style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
                       />
+                      {!isLogin && (
+                        <div style={{ 
+                          fontSize: '12px', 
+                          marginTop: '4px', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px', 
+                          border: '1px solid #f3f4f6', 
+                          backgroundColor: '#fafafa', 
+                          color: '#6b7280',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}>
+                          <svg style={{ width: '12px', height: '12px', marginRight: '8px', color: '#9ca3af' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Password must be at least 8 characters with at least one uppercase letter and one number.</span>
+                        </div>
+                      )}
+                      {passwordError && (
+                        <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                          {passwordError}
+                        </div>
+                      )}
                     </div>
 
                     {!isLogin && (
@@ -1271,17 +1335,84 @@ export default function HomePage() {
                           type="password"
                           placeholder={(!focus.confirmPassword && !confirmPassword) ? 'Confirm your password' : ''}
                           value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          onFocus={() => setFocus(f => ({ ...f, confirmPassword: true }))}
+                          onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            if (confirmPasswordError) setConfirmPasswordError('');
+                          }}
+                          onFocus={() => {
+                            setFocus(f => ({ ...f, confirmPassword: true }));
+                            if (confirmPasswordError) setConfirmPasswordError('');
+                          }}
                           onBlur={() => setFocus(f => ({ ...f, confirmPassword: false }))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                           style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
                         />
+                        {confirmPasswordError && (
+                          <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                            {confirmPasswordError}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     <button
-                      type="submit"
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        
+                        // Clear previous errors
+                        setEmailError('');
+                        setPasswordError('');
+                        setUsernameError('');
+                        setConfirmPasswordError('');
+                        
+                        let hasErrors = false;
+                        
+                        // Check for empty fields first
+                        if (!email || email.trim() === '') {
+                          setEmailError('Please enter an email address.');
+                          hasErrors = true;
+                        } else {
+                          // Check email format
+                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                          if (!emailRegex.test(email.trim())) {
+                            setEmailError('Please enter an email address.');
+                            hasErrors = true;
+                          }
+                        }
+                        
+                        if (!password || password.trim() === '') {
+                          setPasswordError('Please enter the password.');
+                          hasErrors = true;
+                        }
+                        
+                        if (!isLogin) {
+                          if (!username || username.trim() === '') {
+                            setUsernameError('Please enter a username.');
+                            hasErrors = true;
+                          }
+                          if (!confirmPassword || confirmPassword.trim() === '') {
+                            setConfirmPasswordError('Please confirm your password.');
+                            hasErrors = true;
+                          }
+                          // Check password format first, then check if passwords match
+                          const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+                          if (!passwordRegex.test(password)) {
+                            setPasswordError('Password must be at least 8 characters with at least one uppercase letter and one number.');
+                            hasErrors = true;
+                          } else if (password !== confirmPassword) {
+                            setConfirmPasswordError('Passwords do not match.');
+                            hasErrors = true;
+                          }
+                        }
+                        
+                        if (hasErrors) {
+                          return;
+                        }
+                        
+                        // If all validations pass, submit the form
+                        handleSubmit(e);
+                      }}
                       onMouseEnter={() => setIsHovered(true)}
                       onMouseLeave={() => setIsHovered(false)}
                       // not working tailwind classes: color classes. round-corner class
@@ -1311,6 +1442,14 @@ export default function HomePage() {
                             onClick={() => {
                               setIsLogin(!isLogin);
                               setErrorMessage('');
+                              setEmailError('');
+                              setPasswordError('');
+                              setUsernameError('');
+                              setConfirmPasswordError('');
+                              setEmail('');
+                              setPassword('');
+                              setConfirmPassword('');
+                              setUsername('');
                             }}
                             className="w-1/2 h-12 bg-white border border-gray-200 rounded-md font-medium flex items-center justify-center hover:bg-gray-50 transition space-x-2"
                             type="button"
@@ -1342,6 +1481,14 @@ export default function HomePage() {
                           onClick={() => {
                             setIsLogin(!isLogin);
                             setErrorMessage('');
+                            setEmailError('');
+                            setPasswordError('');
+                            setUsernameError('');
+                            setConfirmPasswordError('');
+                            setEmail('');
+                            setPassword('');
+                            setConfirmPassword('');
+                            setUsername('');
                           }}
                           className="w-full bg-white text-blue-600 flex items-center justify-center gap-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200 font-medium text-sm"
                           style={{ height: '48px' }}
@@ -1374,6 +1521,15 @@ export default function HomePage() {
                         onClick={() => {
                           setShowForm(false);
                           setErrorMessage('');
+                          setEmail('');
+                          setPassword('');
+                          setConfirmPassword('');
+                          setUsername('');
+                          setEmailError('');
+                          setPasswordError('');
+                          setUsernameError('');
+                          setConfirmPasswordError('');
+                          setIsLogin(true);
                         }}
                         className="bg-white text-gray-500 text-xs flex items-center gap-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200"
                         style={{ height: '48px', padding: '0 16px' }}
@@ -1408,11 +1564,31 @@ export default function HomePage() {
             )}
           </div>
         </div>
-        {showErrorDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+                {showErrorDialog && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '24px',
+              maxWidth: '400px',
+              margin: '0 16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            }}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Message</h3>
+                <h3 className={`text-lg font-semibold ${errorMessage.includes('successful') ? 'text-green-600' : 'text-gray-900'}`}>
+                  {errorMessage.includes('successful') ? 'Success' : 'Message'}
+                </h3>
                 <button
                   onClick={() => setShowErrorDialog(false)}
                   className="text-gray-400 hover:text-gray-600 transition"
@@ -1422,11 +1598,22 @@ export default function HomePage() {
                   </svg>
                 </button>
               </div>
-              <p className="text-gray-700 mb-4">{errorMessage}</p>
+              <div className="flex items-center mb-4">
+                {errorMessage.includes('successful') && (
+                  <svg style={{ width: '20px', height: '20px' }} className="text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-gray-700'}`}>{errorMessage}</p>
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={() => setShowErrorDialog(false)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                  className={`px-4 py-2 text-white rounded-md transition ${
+                    errorMessage.includes('successful') 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
                   OK
                 </button>
