@@ -7,6 +7,10 @@ app = Flask(__name__)
 
 # Remove default_soil_table
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy', 'service': 'flask-seismic-api'})
+
 @app.route('/api/seismic-info', methods=['POST'])
 def seismic_info():
     data = request.get_json()

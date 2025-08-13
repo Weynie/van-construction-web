@@ -1,20 +1,35 @@
-van-construction-web
+# Construction Van Web
 
-A modern website for planning construction in Metro Vancouver.
-Now under development.
-Thanks for your visit.
+A modern website for planning construction in Metro Vancouver with integrated analysis capabilities.
 
+## Quick Start
 
+1. **Clone the repository**
+2. **Set up environment**: Copy `env.template` to `.env` and configure PostgreSQL credentials
+3. **Start the application**: `docker-compose up -d`
+4. **Access the app**: Open http://localhost:3000
 
-How to use it:
+## Detailed Setup
 
+For complete setup instructions, see [SETUP.md](SETUP.md)
 
+## Architecture
 
-1. set up your PostgreSQL username and password at .env under root folder for Docker
+- **Frontend**: Next.js (Port 3000)
+- **Spring Boot Backend**: User management, API keys (Port 8080)
+- **Flask Backend**: Seismic calculations (Port 5001)
+- **Database**: PostgreSQL (Port 5432)
 
-2\. start flask backend: cd pys, python seismic\_api.py
+## Features
 
-3\. start Docker applciation and Docker containers: docker-compose up -d
+- User authentication and registration
+- Secure API key storage
+- Seismic hazard analysis
+- Soil classification
+- Snow and wind load calculations
+- Modern responsive UI
+- More on the way
 
-4\. open https://localhost:3000 at your browser
+## Troubleshooting
 
+See [SETUP.md](SETUP.md) for development workflow and troubleshooting.

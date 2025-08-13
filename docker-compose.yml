@@ -45,6 +45,29 @@ services:
       retries: 3
       start_period: 60s
 
+  # Python Flask Backend
+  flask-backend:
+    build:
+      context: ./pys
+      dockerfile: Dockerfile
+    container_name: construction_flask_backend
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=seismic_api.py
+    volumes:
+      - ./pys/GeoVan_src4326.tif:/app/GeoVan_src4326.tif:ro
+    networks:
+      - construction_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Next.js Frontend
   frontend:
     build:
@@ -62,6 +85,8 @@ services:
       - /app/.next
     depends_on:
       backend:
+        condition: service_healthy
+      flask-backend:
         condition: service_healthy
     networks:
       - construction_network
