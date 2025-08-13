@@ -60,7 +60,7 @@ public class UserController {
             if (userRepository.findByEmail(email).isPresent()) {
                 return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body("Registration failed. Try another email or password.");
+                    .body("Registration failed. Email already exists.");
             }
 
             User user = new User();
@@ -101,7 +101,8 @@ public class UserController {
                     
                     return ResponseEntity.ok(Map.of(
                       "token",    token,
-                      "username", username
+                      "username", username,
+                      "userId",   user.getId()
                     ));
                 } else {
                     System.out.println("Invalid password for user: " + email);
@@ -118,6 +119,75 @@ public class UserController {
             return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body("Login failed. Please try again.");
+        }
+    }
+    
+    @GetMapping("/{userId}/profile")
+    public ResponseEntity<?> getProfile(@PathVariable Long userId) {
+        try {
+            // Find the user by ID (primary key)
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            User user = userOpt.get();
+            
+            return ResponseEntity.ok(Map.of(
+                "userId", user.getId(),
+                "username", user.getUsername(),
+                "email", user.getEmail()
+            ));
+            
+        } catch (Exception e) {
+            System.err.println("Profile fetch error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Failed to fetch profile. Please try again.");
+        }
+    }
+
+    @PutMapping("/{userId}/profile")
+    public ResponseEntity<?> updateProfile(@PathVariable Long userId, @RequestBody Map<String, String> body) {
+        try {
+            String newUsername = body.get("username");
+            
+            if (newUsername == null || newUsername.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Username cannot be empty.");
+            }
+            
+            String trimmedUsername = newUsername.trim();
+            
+            // Find the current user by ID (primary key)
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            User user = userOpt.get();
+            
+            // If username is not changing, just return success
+            if (trimmedUsername.equals(user.getUsername())) {
+                return ResponseEntity.ok(Map.of(
+                    "message", "Username unchanged",
+                    "username", user.getUsername()
+                ));
+            }
+            
+            // Update the username (usernames can be duplicated, so no duplicate check needed)
+            user.setUsername(trimmedUsername);
+            userRepository.save(user);
+            
+            System.out.println("Profile updated for user ID: " + userId + ", new username: " + trimmedUsername);
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "Profile updated successfully",
+                "username", user.getUsername()
+            ));
+            
+        } catch (Exception e) {
+            System.err.println("Profile update error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Failed to update profile. Please try again.");
         }
     }
 }

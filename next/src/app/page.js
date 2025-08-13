@@ -1,6 +1,9 @@
 'use client';  // Important: enable client-side hooks in App Router
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { apiKeyService } from '../services/apiKeyService';
+import { userService } from '../services/userService';
+import ApiKeyInput from '../components/ApiKeyInput';
 
 // Add CSS for hiding scrollbars
 const scrollbarHideStyles = `
@@ -18,6 +21,7 @@ export default function HomePage() {
   const [showForm, setShowForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -93,10 +97,86 @@ export default function HomePage() {
   // Add state for sediment types data
   const [sedimentTypes, setSedimentTypes] = useState([]);
   const [loadingSediments, setLoadingSediments] = useState(false);
-  const [sedimentError, setSedimentError] = useState('');
+  const [seismicFormError, setSeismicFormError] = useState('');
+  const [showSeismicValidationError, setShowSeismicValidationError] = useState(false);
 
-  // Add state for Flask API results
-  const [seismicResult, setSeismicResult] = useState(null);
+  // Add state for Flask API results per tab
+  const [seismicResults, setSeismicResults] = useState({});
+
+  // API Key management state
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState(null);
+  const [showApiKeySecurityInfo, setShowApiKeySecurityInfo] = useState(false);
+  const [showSecurityInfoModal, setShowSecurityInfoModal] = useState(false);
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState('');
+  const [apiKeySuccess, setApiKeySuccess] = useState('');
+  const [rememberApiKey, setRememberApiKey] = useState(false);
+  const [dontShowStorePrompt, setDontShowStorePrompt] = useState(false);
+  
+  // Toast notification state
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success'); // 'success' or 'error'
+  
+  // Settings modal state
+  const [selectedSettingCategory, setSelectedSettingCategory] = useState('general');
+  
+  // API key decryption modal state for seismic template
+  const [showSeismicDecryptModal, setShowSeismicDecryptModal] = useState(false);
+  const [seismicDecryptPassword, setSeismicDecryptPassword] = useState('');
+  const [seismicDecryptError, setSeismicDecryptError] = useState('');
+  const [seismicDecryptLoading, setSeismicDecryptLoading] = useState(false);
+  const [pendingSeismicData, setPendingSeismicData] = useState(null);
+  
+
+  
+  // Language dropdown state
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('Auto-detect');
+
+  // Check for existing authentication on component mount
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const token = localStorage.getItem('token');
+        const storedUserId = localStorage.getItem('userId');
+        if (token && storedUserId) {
+          const userId = parseInt(storedUserId);
+          setIsAuthenticated(true);
+          setUserId(userId);
+          
+          // Fetch user profile data
+          try {
+            console.log('Fetching user profile for userId:', userId);
+            const profile = await userService.getUserProfile(userId);
+            console.log('User profile fetched:', profile);
+            setUsername(profile.username);
+          } catch (error) {
+            console.error('Failed to fetch user profile:', error);
+            // If profile fetch fails, user might not be authenticated anymore
+            // Clear authentication state
+            setIsAuthenticated(false);
+            setUserId(null);
+            setUsername('');
+            localStorage.removeItem('token');
+            localStorage.removeItem('userId');
+          }
+        }
+      }
+    };
+    
+    checkAuthentication();
+  }, []);
+  
+  // Settings dropdown state
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
+  const [showDeleteApiKeyModal, setShowDeleteApiKeyModal] = useState(false);
+  const [deleteApiKeyPassword, setDeleteApiKeyPassword] = useState('');
+  
+  // API key storage state
+  const [currentUserPassword, setCurrentUserPassword] = useState('');
+  const [showStoreApiKeyModal, setShowStoreApiKeyModal] = useState(false);
 
   // Add state for Snow Load and Wind Load data
   const [snowLoadData, setSnowLoadData] = useState([]);
@@ -204,14 +284,14 @@ export default function HomePage() {
   // Add fetchSedimentTypes function
   const fetchSedimentTypes = async () => {
     setLoadingSediments(true);
-    setSedimentError("");
+    setSeismicFormError("");
     try {
       const res = await fetch("http://localhost:8080/api/sediment-types");
       if (!res.ok) throw new Error("Failed to fetch sediment types");
       const data = await res.json();
       setSedimentTypes(data);
     } catch (err) {
-      setSedimentError("Error fetching sediment types from backend.");
+      setSeismicFormError("Error fetching sediment types from backend.");
       setSedimentTypes([]);
     } finally {
       setLoadingSediments(false);
@@ -503,6 +583,13 @@ export default function HomePage() {
     };
   }, [handleClickOutside]);
 
+  // Check API key status when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && userId) {
+      checkApiKeyStatus();
+    }
+  }, [isAuthenticated, userId]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -522,9 +609,23 @@ export default function HomePage() {
           // Note: localStorage usage - this may not work in all environments
           if (typeof window !== 'undefined' && window.localStorage) {
             localStorage.setItem('token', data.token);
+            localStorage.setItem('userId', data.userId);
           }
           setIsAuthenticated(true);
-          setUsername(data.username || username);
+          setUserId(data.userId);
+          
+          // Fetch user profile to ensure we have the latest data
+          try {
+            console.log('Fetching user profile after login for userId:', data.userId);
+            const profile = await userService.getUserProfile(data.userId);
+            console.log('User profile fetched after login:', profile);
+            setUsername(profile.username);
+          } catch (error) {
+            console.error('Failed to fetch user profile after login:', error);
+            // Fallback to username from login response
+            setUsername(data.username || username);
+          }
+          
           setShowForm(false);
           setErrorMessage('');
         } else {
@@ -569,9 +670,218 @@ export default function HomePage() {
   const logout = () => {
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.removeItem('token');
+      localStorage.removeItem('userId');
     }
     setIsAuthenticated(false);
     setUsername('');
+    setUserId(null);
+    setHasStoredApiKey(false);
+    setApiKeyStatus(null);
+  };
+
+  // Toast notification helper
+  const showToastNotification = (message, type = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 4000);
+  };
+
+
+
+  // API Key management functions
+  const checkApiKeyStatus = async () => {
+    if (!isAuthenticated || !userId) return;
+    
+    try {
+      setApiKeyLoading(true);
+      setApiKeyError('');
+      
+      const status = await apiKeyService.getApiKeyStatus(userId);
+      
+      setHasStoredApiKey(status.hasStoredKey);
+      setApiKeyStatus(status);
+    } catch (error) {
+      console.error('Error checking API key status:', error);
+      setApiKeyError('Failed to check API key status');
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const storeApiKey = async (apiKey, userPassword, rememberKey) => {
+    if (!isAuthenticated || !userId) return;
+    
+    try {
+      setApiKeyLoading(true);
+      setApiKeyError('');
+      
+      const result = await apiKeyService.storeApiKey(userId, apiKey, userPassword, rememberKey);
+      
+      setHasStoredApiKey(result.hasStoredKey);
+      return result;
+    } catch (error) {
+      console.error('Error storing API key:', error);
+      setApiKeyError(error.message || 'Failed to store API key');
+      throw error;
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const deleteApiKey = async (userPassword) => {
+    if (!isAuthenticated || !userId) return;
+    
+    try {
+      setApiKeyLoading(true);
+      setApiKeyError('');
+      
+      const result = await apiKeyService.deleteApiKey(userId, userPassword);
+      
+      setHasStoredApiKey(result.hasStoredKey);
+      return result;
+    } catch (error) {
+      console.error('Error deleting API key:', error);
+      setApiKeyError(error.message || 'Failed to delete API key');
+      throw error;
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const handleDeleteApiKey = async () => {
+    if (!deleteApiKeyPassword.trim()) {
+      setApiKeyError('Please enter your password');
+      return;
+    }
+
+    try {
+      await deleteApiKey(deleteApiKeyPassword);
+      setShowDeleteApiKeyModal(false);
+      setDeleteApiKeyPassword('');
+      setApiKeyError('');
+      setRememberApiKey(false); // Reset checkbox after successful deletion
+      showToastNotification('API key deleted successfully!', 'success');
+      
+      // Refresh API key status after successful deletion
+      await checkApiKeyStatus();
+    } catch (error) {
+      // Error is already set in deleteApiKey function
+    }
+  };
+
+
+
+  const handleSeismicDecrypt = async () => {
+    if (!seismicDecryptPassword.trim()) {
+      setSeismicDecryptError('Please enter your password');
+      return;
+    }
+
+    setSeismicDecryptLoading(true);
+    setSeismicDecryptError('');
+
+    try {
+      const result = await apiKeyService.getApiKey(userId, seismicDecryptPassword);
+      if (result.hasStoredKey && result.apiKey) {
+        setShowSeismicDecryptModal(false);
+        setSeismicDecryptPassword('');
+        setSeismicDecryptError('');
+        
+        // Continue with the pending seismic operation
+        if (pendingSeismicData) {
+          const { data, currentSedimentTypes, tabKey } = pendingSeismicData;
+          const apiKeyToUse = result.apiKey;
+          
+          try {
+            const res = await fetch('http://localhost:5001/api/seismic-info', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                address: data.address,
+                api_key: apiKeyToUse,
+                soil_table: currentSedimentTypes
+              })
+            });
+            if (!res.ok) throw new Error('Failed to fetch seismic info');
+            const seismicResult = await res.json();
+            setSeismicResults(prev => ({
+              ...prev,
+              [tabKey]: seismicResult
+            }));
+            
+            // Update sediment types with probabilities
+            if (seismicResult.most_similar_soil && seismicResult.rgb && currentSedimentTypes.length > 0) {
+              const rgb = seismicResult.rgb;
+              const probs = currentSedimentTypes.map(row => {
+                const soil_rgb = [row.color_r, row.color_g, row.color_b];
+                const dot = rgb[0]*soil_rgb[0] + rgb[1]*soil_rgb[1] + rgb[2]*soil_rgb[2];
+                const norm1 = Math.sqrt(rgb[0]**2 + rgb[1]**2 + rgb[2]**2);
+                const norm2 = Math.sqrt(soil_rgb[0]**2 + soil_rgb[1]**2 + soil_rgb[2]**2);
+                return norm1 && norm2 ? dot/(norm1*norm2) : 0;
+              });
+              setSedimentTypes(currentSedimentTypes.map((row, i) => ({ ...row, probability: probs[i] })));
+            }
+            
+            showToastNotification('Seismic data retrieved successfully!', 'success');
+          } catch (err) {
+            setSeismicFormError('Error retrieving seismic data.');
+            setSeismicResults(prev => ({
+              ...prev,
+              [tabKey]: null
+            }));
+          }
+          setPendingSeismicData(null);
+        }
+      } else {
+        setSeismicDecryptError('No API key found or invalid password');
+      }
+    } catch (error) {
+      setSeismicDecryptError(error.message || 'Failed to decrypt API key');
+    } finally {
+      setSeismicDecryptLoading(false);
+    }
+  };
+
+  const handleStoreApiKey = async (apiKey, rememberKey) => {
+    if (!currentUserPassword.trim()) {
+      setApiKeyError('Please enter your password');
+      return;
+    }
+
+    try {
+      let keyToStore = apiKey;
+      
+      // If user already has a stored API key, retrieve it first
+      if (hasStoredApiKey && (!apiKey || apiKey.trim() === '')) {
+        try {
+          const storedKeyData = await apiKeyService.getApiKey(userId, currentUserPassword);
+          keyToStore = storedKeyData.apiKey;
+        } catch (retrieveError) {
+          console.error('Error retrieving stored API key:', retrieveError);
+          setApiKeyError('Failed to retrieve stored API key. Please try again.');
+          return;
+        }
+      }
+      
+      // Don't store if the key is empty
+      if (!keyToStore || keyToStore.trim() === '') {
+        setApiKeyError('No API key to store. Please enter an API key first.');
+        return;
+      }
+
+      await storeApiKey(keyToStore, currentUserPassword, rememberKey);
+      setShowStoreApiKeyModal(false);
+      setCurrentUserPassword('');
+      setApiKeyError('');
+      setRememberApiKey(false); // Reset checkbox after successful storage
+      showToastNotification('API key stored successfully!', 'success');
+      
+      // Refresh API key status after successful storage
+      await checkApiKeyStatus();
+    } catch (error) {
+      // Error is already set in storeApiKey function
+    }
   };
 
   // Project management functions
@@ -712,6 +1022,54 @@ export default function HomePage() {
         case 'copy':
           const existingTabNames = getExistingNames('tab', projectId, pageId);
           const newTabName = createCopy(tab.name, existingTabNames);
+          const newTabId = Date.now();
+          
+          // Copy tab-specific data based on tab type
+          const originalTabKey = `${projectId}_${pageId}_${tabId}`;
+          const newTabKey = `${projectId}_${pageId}_${newTabId}`;
+          
+          // Copy seismic data if it's a seismic tab
+          if (tab.type === 'Seismic Template') {
+            const originalSeismicData = seismicTabData[originalTabKey];
+            const originalSeismicResult = seismicResults[originalTabKey];
+            
+            if (originalSeismicData) {
+              setSeismicTabData(prev => ({
+                ...prev,
+                [newTabKey]: { ...originalSeismicData }
+              }));
+            }
+            
+            if (originalSeismicResult) {
+              setSeismicResults(prev => ({
+                ...prev,
+                [newTabKey]: { ...originalSeismicResult }
+              }));
+            }
+          }
+          
+          // Copy snow load data if it's a snow load tab
+          if (tab.type === 'Snow Load') {
+            const originalSnowData = snowLoadTabData[originalTabKey];
+            if (originalSnowData) {
+              setSnowLoadTabData(prev => ({
+                ...prev,
+                [newTabKey]: { ...originalSnowData }
+              }));
+            }
+          }
+          
+          // Copy wind load data if it's a wind load tab
+          if (tab.type === 'Wind Load') {
+            const originalWindData = windLoadTabData[originalTabKey];
+            if (originalWindData) {
+              setWindLoadTabData(prev => ({
+                ...prev,
+                [newTabKey]: { ...originalWindData }
+              }));
+            }
+          }
+          
           const updatedProjects = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -720,7 +1078,7 @@ export default function HomePage() {
                   if (pa.id === pageId) {
                     const copiedTab = {
                       ...tab,
-                      id: Date.now(),
+                      id: newTabId,
                       name: newTabName,
                       active: false
                     };
@@ -1081,6 +1439,37 @@ export default function HomePage() {
 
   const handleTabTypeChange = (tabId, newType) => {
     const { projectId, pageId } = selectedPage;
+    
+    // Clear any existing data for this tab when type changes
+    const tabKey = `${projectId}_${pageId}_${tabId}`;
+    
+    // Clear seismic data
+    setSeismicTabData(prev => {
+      const newData = { ...prev };
+      delete newData[tabKey];
+      return newData;
+    });
+    
+    setSeismicResults(prev => {
+      const newResults = { ...prev };
+      delete newResults[tabKey];
+      return newResults;
+    });
+    
+    // Clear snow load data
+    setSnowLoadTabData(prev => {
+      const newData = { ...prev };
+      delete newData[tabKey];
+      return newData;
+    });
+    
+    // Clear wind load data
+    setWindLoadTabData(prev => {
+      const newData = { ...prev };
+      delete newData[tabKey];
+      return newData;
+    });
+    
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         return {
@@ -1646,17 +2035,425 @@ export default function HomePage() {
         {/* Right side - Language, Settings, Logout */}
         <div className="flex items-center space-x-4">
           
-          <button className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" title="Language">
-            <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-            </svg>
-          </button>
-          <button className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" title="Settings">
-            <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+              className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" 
+              title="Language"
+            >
+              <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+              </svg>
+            </button>
+            
+            {/* Language Dropdown */}
+            {showLanguageDropdown && (
+              <div 
+                className="absolute top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+                style={{ 
+                  right: '0',
+                  transform: 'translateX(0)',
+                  width: '200px',
+                  backgroundColor: '#ffffff',
+                  backdropFilter: 'none'
+                }}
+              >
+                <div className="py-1 bg-white">
+                  <div className="px-3 py-1 text-xs font-normal text-gray-500 uppercase tracking-wider border-b border-gray-100 bg-white">
+                    Language
+                  </div>
+                  {['Auto-detect', 'English', 'Spanish', 'French'].map((language) => (
+                    <button
+                      key={language}
+                      onClick={() => {
+                        setSelectedLanguage(language);
+                        setShowLanguageDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition ${
+                        selectedLanguage === language ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
+                      }`}
+                    >
+                      {language}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* API Key Status Indicator */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-md transition ${
+                apiKeyLoading
+                  ? 'bg-gray-50 text-gray-500 border border-gray-200 cursor-not-allowed'
+                  : hasStoredApiKey 
+                    ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100' 
+                    : 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+              }`}
+              title={
+                hasStoredApiKey 
+                  ? `API Key is stored securely\nLast used: ${apiKeyStatus?.lastUsedAt ? new Date(apiKeyStatus.lastUsedAt).toLocaleDateString() : 'Never'}\nCreated: ${apiKeyStatus?.createdAt ? new Date(apiKeyStatus.createdAt).toLocaleDateString() : 'Unknown'}`
+                  : 'API Key not stored - click to manage'
+              }
+            >
+              <svg style={{ width: '14px', height: '14px' }} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              <span className="text-xs font-medium">
+                {apiKeyLoading ? 'Checking...' : (hasStoredApiKey ? 'API Key ✓' : 'API Key ○')}
+              </span>
+            </button>
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+              className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" 
+              title="Settings"
+            >
+              <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            
+            {/* Settings Modal */}
+            {showSettingsDropdown && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '8px',
+                  maxWidth: '800px',
+                  width: '90%',
+                  height: '600px',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Settings
+                    </h3>
+                    <button
+                      onClick={() => setShowSettingsDropdown(false)}
+                      className="text-gray-400 hover:text-gray-600 transition"
+                    >
+                      <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {/* Content Area */}
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Left Sidebar - Categories */}
+                    <div className="w-64 bg-gray-50 border-r border-gray-200 p-4">
+                      <div className="space-y-1">
+                        {/* General */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('general')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'general' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">General</span>
+                        </button>
+                        
+                        {/* Notifications */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('notifications')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'notifications' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.19 4.19A2 2 0 004 6v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-1.81 1.19z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">Notifications</span>
+                        </button>
+                        
+                        {/* Personalization */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('personalization')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'personalization' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">Personalization</span>
+                        </button>
+                        
+                        {/* Data Controls */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('data')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'data' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">Data Controls</span>
+                        </button>
+                        
+                        {/* Security */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('security')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'security' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">Security</span>
+                        </button>
+                        
+                        {/* Account */}
+                        <button
+                          onClick={() => setSelectedSettingCategory('account')}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                            selectedSettingCategory === 'account' 
+                              ? 'bg-white shadow-sm border border-gray-200' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700">Account</span>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Right Content Area */}
+                    <div className="flex-1 p-6 overflow-y-auto">
+                      {selectedSettingCategory === 'general' && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900 mb-6">General</h4>
+                          <div className="space-y-6">
+                            {/* Theme */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700">Theme</span>
+                              <select className="px-3 py-1 text-sm border border-gray-300 rounded-md bg-white">
+                                <option>System</option>
+                                <option>Light</option>
+                                <option>Dark</option>
+                              </select>
+                            </div>
+                            
+
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedSettingCategory === 'security' && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900 mb-6">Security</h4>
+                          <div className="space-y-6">
+                            {/* Success/Error Messages */}
+                            {apiKeySuccess && (
+                              <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                                <div className="flex items-center">
+                                  <svg style={{ width: '16px', height: '16px' }} className="text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span className="text-sm text-green-800">{apiKeySuccess}</span>
+                                </div>
+                              </div>
+                            )}
+                            {apiKeyError && (
+                              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                                <div className="flex items-center">
+                                  <svg style={{ width: '16px', height: '16px' }} className="text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  <span className="text-sm text-red-800">{apiKeyError}</span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* API Key Management */}
+                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <h5 className="text-sm font-semibold text-gray-800 mb-4">API Key Management</h5>
+                              
+                              {/* Status */}
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm text-gray-700">Status:</span>
+                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                  hasStoredApiKey 
+                                    ? 'bg-green-100 text-green-800 border border-green-200' 
+                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                }`}>
+                                  {hasStoredApiKey ? '✓ Stored' : '○ Not stored'}
+                                </span>
+                              </div>
+                              
+                              {/* Details */}
+                              {hasStoredApiKey && apiKeyStatus && (
+                                <div className="text-xs text-gray-500 space-y-1 mb-4">
+                                  <div>Last used: {apiKeyStatus.lastUsedAt ? new Date(apiKeyStatus.lastUsedAt).toLocaleDateString() : 'Never'}</div>
+                                  <div>Created: {apiKeyStatus.createdAt ? new Date(apiKeyStatus.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                                </div>
+                              )}
+                              
+                              {/* Action Button */}
+                              {hasStoredApiKey ? (
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-700">API Key</div>
+                                    <div className="text-xs text-gray-500">Securely stored</div>
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      setShowDeleteApiKeyModal(true);
+                                      setShowSettingsDropdown(false);
+                                    }}
+                                    className="px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500 text-center py-2">
+                                  No API key stored
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Password Management */}
+                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <h5 className="text-sm font-semibold text-gray-800 mb-4">Password Management</h5>
+                              
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-700">Password</div>
+                                  <div className="text-xs text-gray-500">Last changed: 3 months ago</div>
+                                </div>
+                                <button className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                                  Change
+                                </button>
+                              </div>
+                            </div>
+                            
+
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Account Settings */}
+                      {selectedSettingCategory === 'account' && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900 mb-6">Account</h4>
+                          <div className="space-y-6">
+                            {/* User ID Display and Edit */}
+                            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                              <h5 className="text-sm font-semibold text-blue-800 mb-4">User Information</h5>
+                              
+                              <div className="space-y-3">
+                                
+                                {/* Username (Editable) */}
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-blue-700">Username:</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-sm font-medium text-blue-900">{username || 'Not set'}</span>
+                                    {isAuthenticated && (
+                                      <button
+                                        onClick={async () => {
+                                          const newUsername = prompt('Enter new username:', username);
+                                          if (newUsername && newUsername.trim()) {
+                                            try {
+                                              console.log('Updating username to:', newUsername.trim());
+                                              const result = await userService.updateProfile(userId, newUsername.trim());
+                                              console.log('Profile update result:', result);
+                                              setUsername(newUsername.trim());
+                                              showToastNotification('Username updated successfully!', 'success');
+                                            } catch (error) {
+                                              console.error('Failed to update username:', error);
+                                              showToastNotification(error.message || 'Failed to update username', 'error');
+                                            }
+                                          }
+                                        }}
+                                        className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                        title="Change Username"
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Authentication Status */}
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-blue-700">Status:</span>
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                    isAuthenticated 
+                                      ? 'bg-green-100 text-green-800 border border-green-200' 
+                                      : 'bg-red-100 text-red-800 border border-red-200'
+                                  }`}>
+                                    {isAuthenticated ? '✓ Authenticated' : '○ Not authenticated'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+
+                            
+                            {/* Password */}
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="text-sm font-medium text-gray-700">Password</div>
+                                <div className="text-xs text-gray-500">Last changed: 3 months ago</div>
+                              </div>
+                              <button className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                                Change
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Placeholder content for other categories */}
+                      {selectedSettingCategory !== 'general' && selectedSettingCategory !== 'security' && selectedSettingCategory !== 'account' && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900 mb-6 capitalize">{selectedSettingCategory}</h4>
+                          <div className="text-center py-12">
+                            <svg style={{ width: '48px', height: '48px' }} className="mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p className="text-gray-500">Settings for {selectedSettingCategory} will be implemented soon.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <button 
             onClick={logout}
             className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100"
@@ -3161,6 +3958,7 @@ export default function HomePage() {
                       bldgCode: '',
                       apiKey: ''
                     };
+                    const seismicResult = seismicResults[tabKey] || null;
                     const handleChange = (field, value) => {
                       setSeismicTabData(prev => ({
                         ...prev,
@@ -3169,14 +3967,25 @@ export default function HomePage() {
                           [field]: value
                         }
                       }));
+                      
+                      // Clear validation error when user starts typing in required fields
+                      if ((field === 'address' || field === 'apiKey') && value.trim()) {
+                        setSeismicFormError('');
+                        setShowSeismicValidationError(false);
+                      }
                     };
                     return (
                       <div className="max-w-md mx-auto bg-orange-100 rounded-lg p-4 border border-orange-200">
                         <div className="grid grid-cols-2 gap-2 items-center text-purple-700 text-base font-medium">
                           <div className="text-right pr-2">Designer</div>
                           <input className="bg-orange-50 rounded px-2 py-1" value={data.designer || ''} onChange={e => handleChange('designer', e.target.value)} />
-                          <div className="text-right pr-2">Address</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.address || ''} onChange={e => handleChange('address', e.target.value)} placeholder="Enter the address" />
+                          <div className="text-right pr-2">Address *</div>
+                          <input 
+                            className={`bg-orange-50 rounded px-2 py-1 ${showSeismicValidationError && !data.address ? 'border-2 border-red-500' : ''}`} 
+                            value={data.address || ''} 
+                            onChange={e => handleChange('address', e.target.value)} 
+                            placeholder="Enter the address" 
+                          />
                           <div className="text-right pr-2">Project #</div>
                           <input className="bg-orange-50 rounded px-2 py-1" value={data.project || ''} onChange={e => handleChange('project', e.target.value)} />
                           <div className="text-right pr-2">Revision</div>
@@ -3185,21 +3994,89 @@ export default function HomePage() {
                           <input className="bg-orange-50 rounded px-2 py-1" value={data.date || ''} onChange={e => handleChange('date', e.target.value)} />
                           <div className="text-right pr-2">Bldg code</div>
                           <input className="bg-orange-50 rounded px-2 py-1" value={data.bldgCode || ''} onChange={e => handleChange('bldgCode', e.target.value)} />
-                          <div className="text-right pr-2">Api_key</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.apiKey || ''} onChange={e => handleChange('apiKey', e.target.value)} placeholder="Enter your API key" />
+                          <div className="text-right pr-2">Api_key *</div>
+                          {hasStoredApiKey ? (
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value="Securely stored - no need to enter"
+                                disabled={true}
+                                className="bg-green-50 rounded px-2 py-1 border border-green-300 text-green-700 text-sm cursor-not-allowed w-full"
+                                style={{ minWidth: '280px' }}
+                              />
+
+                            </div>
+                          ) : (
+                            <input
+                              type="password"
+                              value={data.apiKey || ''}
+                              onChange={(e) => handleChange('apiKey', e.target.value)}
+                              placeholder="Enter your API key"
+                              disabled={apiKeyLoading}
+                              className={`bg-orange-50 rounded px-2 py-1 border focus:outline-none disabled:bg-gray-100 disabled:text-gray-500 ${
+                                showSeismicValidationError && !data.apiKey 
+                                  ? 'border-red-500 focus:border-red-500' 
+                                  : 'border-orange-200 focus:border-orange-400'
+                              }`}
+                            />
+                          )}
+                          
                         </div>
+                        
+                        {/* API Key Status Note - moved outside the grid for better positioning */}
+                        {hasStoredApiKey && (
+                          <div className="text-xs text-green-600 text-center mt-4 mb-3 px-4 py-2 bg-green-50 rounded border border-green-200">
+                            ✓ API key securely stored - can be managed in Settings
+                          </div>
+                        )}
+                        
+                        {/* API Key Options - only show when no key is stored */}
+                        {!hasStoredApiKey && (
+                          <div className="flex items-center justify-center space-x-2 mt-2 mb-2">
+                            <input
+                              type="checkbox"
+                              id="remember-key"
+                              checked={rememberApiKey}
+                              onChange={(e) => setRememberApiKey(e.target.checked)}
+                              disabled={apiKeyLoading}
+                              className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                            />
+                            <label htmlFor="remember-key" className="text-sm text-gray-700">
+                              Remember my API key securely
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setShowSecurityInfoModal(true)}
+                              className="text-blue-600 text-sm hover:text-blue-800 underline"
+                              disabled={apiKeyLoading}
+                            >
+                              Learn more about security
+                            </button>
+                          </div>
+                        )}
+                        
+                        {/* Required Fields Note */}
+                        <div className="text-xs text-gray-500 text-center mt-2">
+                          * Required fields
+                        </div>
+                        
                         {/* Retrieve Data Button */}
                         <div className="flex justify-center mt-6">
                           <button
                             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
                             style={{ minWidth: '180px' }}
                             onClick={async () => {
-                              setSedimentError("");
-                              setSeismicResult(null);
-                              if (!data.address || !data.apiKey) {
-                                setSedimentError("Address and API key are required.");
+                              setSeismicFormError("");
+                              setSeismicResults(prev => ({
+                                ...prev,
+                                [tabKey]: null
+                              }));
+                              if (!data.address || (!data.apiKey && !hasStoredApiKey)) {
+                                setSeismicFormError("Address and API key are required.");
+                                setShowSeismicValidationError(true);
                                 return;
                               }
+                              setShowSeismicValidationError(false);
                               let currentSedimentTypes = sedimentTypes;
                               if (currentSedimentTypes.length === 0) {
                                 try {
@@ -3209,7 +4086,7 @@ export default function HomePage() {
                                   currentSedimentTypes = await res.json();
                                   setSedimentTypes(currentSedimentTypes);
                                 } catch (err) {
-                                  setSedimentError("Error fetching sediment types from backend.");
+                                  setSeismicFormError("Error fetching sediment types from backend.");
                                   setSedimentTypes([]);
                                   setLoadingSediments(false);
                                   return;
@@ -3217,18 +4094,63 @@ export default function HomePage() {
                               }
                               setLoadingSediments(true);
                               try {
+                                // Determine which API key to use
+                                let apiKeyToUse = data.apiKey;
+                                
+                                // If no API key in input but we have a stored one, retrieve it
+                                if (!apiKeyToUse && hasStoredApiKey) {
+                                  try {
+                                    // Simple retrieval without password for authenticated users
+                                    const response = await fetch(`http://localhost:8080/api/user/${userId}/api-key/retrieve`, {
+                                      method: 'GET',
+                                      headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                        'Content-Type': 'application/json'
+                                      }
+                                    });
+                                    
+                                    if (response.ok) {
+                                      const storedKeyResult = await response.json();
+                                      if (storedKeyResult.hasStoredKey && storedKeyResult.requiresPassword) {
+                                        // Password required - show decryption modal
+                                        setPendingSeismicData({ data, currentSedimentTypes, tabKey });
+                                        setShowSeismicDecryptModal(true);
+                                        setLoadingSediments(false);
+                                        return;
+                                      } else if (storedKeyResult.hasStoredKey && storedKeyResult.apiKey) {
+                                        apiKeyToUse = storedKeyResult.apiKey;
+                                      } else {
+                                        setSeismicFormError('Failed to retrieve stored API key. Please enter it manually.');
+                                        setLoadingSediments(false);
+                                        return;
+                                      }
+                                    } else {
+                                      setSeismicFormError('Failed to retrieve stored API key. Please enter it manually.');
+                                      setLoadingSediments(false);
+                                      return;
+                                    }
+                                  } catch (error) {
+                                    setSeismicFormError('Failed to retrieve stored API key. Please enter it manually.');
+                                    setLoadingSediments(false);
+                                    return;
+                                  }
+                                }
+                                
                                 const res = await fetch('http://localhost:5001/api/seismic-info', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({
                                     address: data.address,
-                                    api_key: data.apiKey,
+                                    api_key: apiKeyToUse,
                                     soil_table: currentSedimentTypes
                                   })
                                 });
                                 if (!res.ok) throw new Error('Failed to fetch seismic info');
                                 const result = await res.json();
-                                setSeismicResult(result);
+                                setSeismicResults(prev => ({
+                                  ...prev,
+                                  [tabKey]: result
+                                }));
                                 // Optionally update sedimentTypes with probabilities
                                 if (result.most_similar_soil && result.rgb && currentSedimentTypes.length > 0) {
                                   const rgb = result.rgb;
@@ -3242,9 +4164,17 @@ export default function HomePage() {
                                   });
                                   setSedimentTypes(currentSedimentTypes.map((row, i) => ({ ...row, probability: probs[i] })));
                                 }
+                                
+                                // Show API key storage option if successful, user has API key, and they checked "Remember my API key securely"
+                                if (data.apiKey && !hasStoredApiKey && !dontShowStorePrompt && rememberApiKey) {
+                                  setShowStoreApiKeyModal(true);
+                                }
                               } catch (err) {
-                                setSedimentError('Error retrieving data.');
-                                setSeismicResult(null);
+                                setSeismicFormError('Error retrieving data.');
+                                setSeismicResults(prev => ({
+                                  ...prev,
+                                  [tabKey]: null
+                                }));
                               } finally {
                                 setLoadingSediments(false);
                               }
@@ -3256,8 +4186,12 @@ export default function HomePage() {
                             className="bg-gray-400 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-500 transition ml-4"
                             style={{ minWidth: '120px' }}
                             onClick={() => {
-                              setSeismicResult(null);
-                              setSedimentError("");
+                              setSeismicResults(prev => ({
+                                ...prev,
+                                [tabKey]: null
+                              }));
+                              setSeismicFormError("");
+                              setShowSeismicValidationError(false);
                               // Clear the fields for the current tab
                               setSeismicTabData(prev => ({
                                 ...prev,
@@ -3314,7 +4248,7 @@ export default function HomePage() {
                             const showProbability = seismicResult && seismicResult.rgb;
                             return (
                               <>
-                                {sedimentError && <div className="text-red-600 text-center mb-2">{sedimentError}</div>}
+                                {showSeismicValidationError && seismicFormError && <div className="text-red-600 text-center mb-2">{seismicFormError}</div>}
                                 {seismicResult && sedimentTypes.length > 0 && (
                                   <div className="overflow-x-auto mt-6">
                                     <table className="min-w-full text-xs text-center border border-gray-300 bg-white rounded">
@@ -3595,6 +4529,382 @@ export default function HomePage() {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Security Info Modal */}
+      {showSecurityInfoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                API Key Security
+              </h3>
+              <button
+                onClick={() => setShowSecurityInfoModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex items-center mb-4">
+              <svg style={{ width: '20px', height: '20px' }} className="text-blue-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="text-gray-700 flex-1">
+                <h4 className="font-semibold mb-2 text-gray-800">How we protect your API key:</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>Your API key is encrypted using your password</li>
+                  <li>We never store your password or API key in plain text</li>
+                  <li>Your key is only accessible when you're logged in</li>
+                  <li>You can delete your stored key at any time</li>
+                  <li>We use industry-standard AES-256 encryption</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex justify-center">
+              <button
+                onClick={() => setShowSecurityInfoModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Store API Key Modal */}
+      {showStoreApiKeyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Store API Key Securely
+              </h3>
+              <button
+                onClick={() => {
+                  setShowStoreApiKeyModal(false);
+                  setCurrentUserPassword('');
+                  setApiKeyError('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex items-center mb-4">
+              <svg style={{ width: '20px', height: '20px' }} className="text-blue-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="text-gray-700 flex-1">
+                <p className="text-sm mb-4">
+                  Your API key was used successfully. Would you like to store it securely so you don't need to enter it again?
+                </p>
+                
+                <div className="space-y-3" style={{ marginBottom: '30px' }}>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Enter your password to store the API key:
+                  </label>
+                  <input
+                    type="password"
+                    value={currentUserPassword}
+                    onChange={(e) => setCurrentUserPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Your password"
+                  />
+                </div>
+                
+                {apiKeyError && (
+                  <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                    {apiKeyError}
+                  </div>
+                )}
+                
+                {/* Don't show again option */}
+                <div className="mt-4 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="dont-show-again"
+                    checked={dontShowStorePrompt}
+                    onChange={(e) => setDontShowStorePrompt(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="dont-show-again" className="ml-2 text-sm text-gray-600">
+                    Don't show this prompt again
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-center space-x-3" style={{ paddingTop: '40px', marginTop: '20px' }}>
+              <button
+                onClick={() => {
+                  setShowStoreApiKeyModal(false);
+                  setCurrentUserPassword('');
+                  setApiKeyError('');
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
+                disabled={apiKeyLoading}
+              >
+                Don't Store
+              </button>
+              <button
+                onClick={() => {
+                  const currentProject = projects.find(p => p.id === selectedPage.projectId);
+                  const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
+                  const activeTab = currentPage?.tabs.find(t => t.active);
+                  const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab?.id}`;
+                  const currentData = seismicTabData[tabKey] || {};
+                  
+                  // If user has stored API key, we'll retrieve it in handleStoreApiKey
+                  // If not, use the one from the input field
+                  const apiKeyToStore = hasStoredApiKey ? '' : (currentData.apiKey || '');
+                  handleStoreApiKey(apiKeyToStore, true);
+                }}
+                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+                disabled={apiKeyLoading}
+              >
+                {apiKeyLoading ? 'Storing...' : 'Store Securely'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete API Key Modal */}
+      {showDeleteApiKeyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Delete API Key
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDeleteApiKeyModal(false);
+                  setDeleteApiKeyPassword('');
+                  setApiKeyError('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex items-center mb-4">
+              <svg style={{ width: '20px', height: '20px' }} className="text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div className="text-gray-700 flex-1">
+                <p className="text-sm mb-4">
+                  Are you sure you want to delete your stored API key? You'll need to enter it again when using seismic features.
+                </p>
+                
+                <div className="space-y-3" style={{ marginBottom: '30px' }}>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Enter your password to confirm deletion:
+                  </label>
+                  <input
+                    type="password"
+                    value={deleteApiKeyPassword}
+                    onChange={(e) => setDeleteApiKeyPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    placeholder="Your password"
+                  />
+                </div>
+                
+                {apiKeyError && (
+                  <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                    {apiKeyError}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-center space-x-3" style={{ paddingTop: '40px', marginTop: '20px' }}>
+              <button
+                onClick={() => {
+                  setShowDeleteApiKeyModal(false);
+                  setDeleteApiKeyPassword('');
+                  setApiKeyError('');
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
+                disabled={apiKeyLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteApiKey}
+                className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 transition disabled:opacity-50"
+                disabled={apiKeyLoading}
+              >
+                {apiKeyLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Seismic API Key Decryption Modal */}
+      {showSeismicDecryptModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Decrypt API Key
+              </h3>
+              <button
+                onClick={() => {
+                  setShowSeismicDecryptModal(false);
+                  setSeismicDecryptPassword('');
+                  setSeismicDecryptError('');
+                  setPendingSeismicData(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex items-center mb-8">
+              <svg style={{ width: '24px', height: '24px' }} className="text-blue-500 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <p className="text-sm text-gray-700">
+                Enter your password to decrypt your stored API key for seismic analysis.
+              </p>
+            </div>
+            
+            <div className="space-y-4" style={{ marginBottom: '30px' }}>
+              <label className="block text-sm font-medium text-gray-700">
+                Enter your password:
+              </label>
+              <input
+                type="password"
+                value={seismicDecryptPassword}
+                onChange={(e) => setSeismicDecryptPassword(e.target.value)}
+                className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Your password"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSeismicDecrypt();
+                  }
+                }}
+              />
+            </div>
+            
+            {seismicDecryptError && (
+              <div className="mt-4 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                {seismicDecryptError}
+              </div>
+            )}
+            
+            <div className="flex justify-center space-x-4" style={{ paddingTop: '40px', marginTop: '20px' }}>
+              <button
+                onClick={() => {
+                  setShowSeismicDecryptModal(false);
+                  setSeismicDecryptPassword('');
+                  setSeismicDecryptError('');
+                  setPendingSeismicData(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
+                disabled={seismicDecryptLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSeismicDecrypt}
+                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+                disabled={seismicDecryptLoading}
+              >
+                {seismicDecryptLoading ? 'Decrypting...' : 'Decrypt & Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className={`flex items-center space-x-3 px-4 py-3 rounded-lg shadow-lg border pointer-events-auto ${
+            toastType === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <svg style={{ width: '20px', height: '20px' }} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {toastType === 'success' ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              )}
+            </svg>
+            <span className="text-sm font-medium">{toastMessage}</span>
+            <button
+              onClick={() => setShowToast(false)}
+              className="text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
       </div>

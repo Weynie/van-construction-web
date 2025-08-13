@@ -31,6 +31,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        System.out.println("=== CONFIGURING SPRING SECURITY ===");
+        
         http
           // 1) turn off CSRF, form login, and HTTP Basic
           .csrf().disable()
@@ -55,6 +57,16 @@ public class SecurityConfig {
               "/api/wind-load-values", "/api/wind-load-values/**"
             ).permitAll()
 
+            // allow API key management endpoints (these require password verification)
+            .requestMatchers(
+              "/api/user/*/api-key",
+              "/api/user/*/api-key/**",
+              "/api/user/api-key/**"
+            ).permitAll()
+            
+            // allow profile update endpoint (requires authentication)
+                            .requestMatchers("/api/users/*/profile").authenticated()
+
             // allow OPTIONS on everything (for CORS preflight)
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
@@ -69,7 +81,19 @@ public class SecurityConfig {
           )
 
           // 3) plug in your JWT filter
-          .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+          .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+          
+          // 4) add custom access denied handler for debugging
+          .exceptionHandling(exceptions -> exceptions
+            .accessDeniedHandler((request, response, accessDeniedException) -> {
+              System.out.println("=== ACCESS DENIED ===");
+              System.out.println("Request URI: " + request.getRequestURI());
+              System.out.println("Request method: " + request.getMethod());
+              System.out.println("Access denied exception: " + accessDeniedException.getMessage());
+              response.setStatus(403);
+              response.getWriter().write("Access denied: " + accessDeniedException.getMessage());
+            })
+          );
 
         return http.build();
     }
