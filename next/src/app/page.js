@@ -48,14 +48,22 @@ export default function HomePage() {
   const [dragOverTab, setDragOverTab] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   
+  // Drag and drop state for projects and pages
+  const [draggedProject, setDraggedProject] = useState(null);
+  const [dragOverProject, setDragOverProject] = useState(null);
+  const [draggedPage, setDraggedPage] = useState(null);
+  const [dragOverPage, setDragOverPage] = useState(null);
+  const [isDraggingProject, setIsDraggingProject] = useState(false);
+  const [isDraggingPage, setIsDraggingPage] = useState(false);
+  
   // Tab scroll state
   const [tabScrollLeft, setTabScrollLeft] = useState(0);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const tabContainerRef = useRef(null);
   
-  // Testing state
-  const [testMode, setTestMode] = useState(false);
+  
+
   
   const [projects, setProjects] = useState([
     {
@@ -90,6 +98,9 @@ export default function HomePage() {
   const [selectedPage, setSelectedPage] = useState({ projectId: 1, pageId: 1 });
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, type: '', itemId: null });
   const [editingItem, setEditingItem] = useState({ type: '', id: null, name: '' });
+  
+  // Copy/Cut and paste state for tabs
+  const [clipboard, setClipboard] = useState({ type: null, data: null }); // 'copy' or 'cut'
 
   // Add state for seismic template fields per tab
   const [seismicTabData, setSeismicTabData] = useState({});
@@ -148,9 +159,7 @@ export default function HomePage() {
           
           // Fetch user profile data
           try {
-            console.log('Fetching user profile for userId:', userId);
             const profile = await userService.getUserProfile(userId);
-            console.log('User profile fetched:', profile);
             setUsername(profile.username);
           } catch (error) {
             console.error('Failed to fetch user profile:', error);
@@ -239,6 +248,23 @@ export default function HomePage() {
       
       return newName;
     }
+  };
+
+  // Helper function to handle duplicate names when moving items
+  const handleDuplicateName = (originalName, existingNames) => {
+    if (!existingNames.includes(originalName)) {
+      return originalName;
+    }
+    
+    let counter = 1;
+    let newName = `${originalName} ${counter}`;
+    
+    while (existingNames.includes(newName)) {
+      counter++;
+      newName = `${originalName} ${counter}`;
+    }
+    
+    return newName;
   };
 
   // Unified function to extract base name from any copied item
@@ -429,6 +455,402 @@ export default function HomePage() {
     setDragOverTab(null);
   }, []);
 
+  // Project drag and drop handlers
+  const handleProjectDragStart = useCallback((e, projectId) => {
+    e.stopPropagation();
+    setIsDraggingProject(true);
+    setDraggedProject(projectId);
+  }, []);
+
+  const handleProjectDragOver = useCallback((e, projectId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedProject && draggedProject !== projectId) {
+      setDragOverProject(projectId);
+    }
+  }, [draggedProject]);
+
+  const handleProjectDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverProject(null);
+  }, []);
+
+  const handleProjectDrop = useCallback((e, targetProjectId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedProject && draggedProject !== targetProjectId) {
+      const updatedProjects = [...projects];
+      const draggedIndex = updatedProjects.findIndex(p => p.id === draggedProject);
+      const targetIndex = updatedProjects.findIndex(p => p.id === targetProjectId);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const [draggedProjectItem] = updatedProjects.splice(draggedIndex, 1);
+        updatedProjects.splice(targetIndex, 0, draggedProjectItem);
+        setProjects(updatedProjects);
+      }
+    }
+    setIsDraggingProject(false);
+    setDraggedProject(null);
+    setDragOverProject(null);
+  }, [draggedProject, projects]);
+
+  const handleProjectDragEnd = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingProject(false);
+    setDraggedProject(null);
+    setDragOverProject(null);
+  }, []);
+
+  // Page drag and drop handlers
+  const handlePageDragStart = useCallback((e, projectId, pageId) => {
+    e.stopPropagation();
+    setIsDraggingPage(true);
+    setDraggedPage({ projectId, pageId });
+  }, []);
+
+  const handlePageDragOver = useCallback((e, projectId, pageId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedPage && (draggedPage.projectId !== projectId || draggedPage.pageId !== pageId)) {
+      setDragOverPage({ projectId, pageId });
+    }
+  }, [draggedPage]);
+
+  const handlePageDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPage(null);
+  }, []);
+
+  const handlePageDrop = useCallback((e, targetProjectId, targetPageId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedPage && (draggedPage.projectId !== targetProjectId || draggedPage.pageId !== targetPageId)) {
+      const updatedProjects = [...projects];
+      const sourceProject = updatedProjects.find(p => p.id === draggedPage.projectId);
+      const targetProject = updatedProjects.find(p => p.id === targetProjectId);
+      
+      if (sourceProject && targetProject) {
+        const sourcePageIndex = sourceProject.pages.findIndex(p => p.id === draggedPage.pageId);
+        
+        if (sourcePageIndex !== -1) {
+          // Remove page from source project
+          const [draggedPageItem] = sourceProject.pages.splice(sourcePageIndex, 1);
+          
+          // Check for duplicate names in target project
+          const existingPageNames = targetProject.pages.map(p => p.name);
+          const originalPageName = draggedPageItem.name;
+          
+          // Handle potential name conflicts (both within same project and across projects)
+          const newPageName = handleDuplicateName(originalPageName, existingPageNames);
+          if (newPageName !== originalPageName) {
+            // Update the page name
+            draggedPageItem.name = newPageName;
+          }
+          
+          // Determine target position based on targetPageId
+          let targetPageIndex = 0;
+          
+          if (targetPageId === 'empty' || targetPageId === 'end') {
+            // Add to end of target project
+            targetPageIndex = targetProject.pages.length;
+          } else if (typeof targetPageId === 'string' && targetPageId.startsWith('between-')) {
+            // Add between pages - find the page after the "between" indicator
+            const afterPageId = targetPageId.replace('between-', '');
+            const afterPageIndex = targetProject.pages.findIndex(p => p.id === parseInt(afterPageId));
+            targetPageIndex = afterPageIndex !== -1 ? afterPageIndex : targetProject.pages.length;
+          } else {
+            // Regular page drop - find the target page
+            const actualTargetPageIndex = targetProject.pages.findIndex(p => p.id === parseInt(targetPageId));
+            targetPageIndex = actualTargetPageIndex !== -1 ? actualTargetPageIndex : targetProject.pages.length;
+          }
+          
+          // Add page to target project at the target position
+          targetProject.pages.splice(targetPageIndex, 0, draggedPageItem);
+          
+          setProjects(updatedProjects);
+          
+          // Update selected page if it was the dragged page
+          if (selectedPage.projectId === draggedPage.projectId && selectedPage.pageId === draggedPage.pageId) {
+            setSelectedPage({ projectId: targetProjectId, pageId: draggedPage.pageId });
+          }
+          
+          // No toast notification needed for page rename
+        }
+      }
+    }
+    setIsDraggingPage(false);
+    setDraggedPage(null);
+    setDragOverPage(null);
+  }, [draggedPage, projects, selectedPage]);
+
+  const handlePageDragEnd = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingPage(false);
+    setDraggedPage(null);
+    setDragOverPage(null);
+  }, []);
+
+  // Copy/Cut and paste functions for tabs
+  const copyTabToClipboard = useCallback((tabId, isCut = false) => {
+    const { projectId, pageId } = selectedPage;
+    const project = projects.find(p => p.id === projectId);
+    const page = project?.pages.find(p => p.id === pageId);
+    const tab = page?.tabs.find(t => t.id === tabId);
+    
+    if (tab) {
+      // Collect all tab-specific data
+      const originalTabKey = `${projectId}_${pageId}_${tabId}`;
+      const tabData = {
+        seismicData: seismicTabData[originalTabKey] || null,
+        seismicResults: seismicResults[originalTabKey] || null,
+        snowLoadData: snowLoadTabData[originalTabKey] || null,
+        windLoadData: windLoadTabData[originalTabKey] || null
+      };
+      
+      const clipboardData = {
+        type: isCut ? 'cut' : 'copy',
+        data: {
+          tab: { ...tab },
+          tabData: tabData,
+          sourceProjectId: projectId,
+          sourcePageId: pageId,
+          sourceTabId: tabId
+        }
+      };
+      setClipboard(clipboardData);
+      
+      // If it's a cut operation, remove the tab from source
+      if (isCut) {
+        const updatedProjects = projects.map(p => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              pages: p.pages.map(pg => {
+                if (pg.id === pageId) {
+                  const updatedTabs = pg.tabs.filter(t => t.id !== tabId);
+                  // Ensure at least one tab remains
+                  if (updatedTabs.length === 0) {
+                    updatedTabs.push({
+                      id: Date.now(),
+                      name: 'Welcome',
+                      type: 'Welcome',
+                      active: true
+                    });
+                  }
+                  return { ...pg, tabs: updatedTabs };
+                }
+                return pg;
+              })
+            };
+          }
+          return p;
+        });
+        setProjects(updatedProjects);
+      }
+    }
+  }, [projects, selectedPage]);
+
+  const pasteTabFromClipboard = useCallback((targetProjectId, targetPageId) => {
+    if (!clipboard.data || clipboard.type === null) return;
+    
+    const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
+    
+    // For cut operations, we don't need to check for same tab since the original was removed
+    // For copy operations, we don't want to paste to the same location
+    if (clipboard.type === 'copy' && sourceProjectId === targetProjectId && sourcePageId === targetPageId && sourceTabId === tab.id) {
+      return;
+    }
+    
+    const updatedProjects = projects.map(p => {
+      if (p.id === targetProjectId) {
+        return {
+          ...p,
+          pages: p.pages.map(pg => {
+            if (pg.id === targetPageId) {
+              // Check for duplicate names
+              const existingTabNames = pg.tabs.map(t => t.name);
+              let newTabName = tab.name;
+              
+              if (existingTabNames.includes(newTabName)) {
+                // Find a unique name
+                let counter = 1;
+                while (existingTabNames.includes(`${newTabName} ${counter}`)) {
+                  counter++;
+                }
+                newTabName = `${newTabName} ${counter}`;
+              }
+              
+              const newTabId = Date.now();
+              const newTab = {
+                ...tab,
+                id: newTabId,
+                name: newTabName,
+                active: false // New tab should not be active
+              };
+              
+              // Restore tab-specific data if it exists
+              if (tabData) {
+                const newTabKey = `${targetProjectId}_${targetPageId}_${newTabId}`;
+                
+                if (tabData.seismicData) {
+                  setSeismicTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.seismicData }
+                  }));
+                }
+                
+                if (tabData.seismicResults) {
+                  setSeismicResults(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.seismicResults }
+                  }));
+                }
+                
+                if (tabData.snowLoadData) {
+                  setSnowLoadTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.snowLoadData }
+                  }));
+                }
+                
+                if (tabData.windLoadData) {
+                  setWindLoadTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.windLoadData }
+                  }));
+                }
+              }
+              
+              return {
+                ...pg,
+                tabs: [...pg.tabs, newTab]
+              };
+            }
+            return pg;
+          })
+        };
+      }
+      return p;
+    });
+    
+    setProjects(updatedProjects);
+    
+    // Clear clipboard after paste
+    if (clipboard.type === 'cut') {
+      setClipboard({ type: null, data: null });
+    }
+    
+    // Close context menu
+    setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
+  }, [clipboard, projects]);
+
+  const pasteTabAfterSpecificTab = useCallback((targetProjectId, targetPageId, targetTabId) => {
+    if (!clipboard.data || clipboard.type === null) return;
+    
+    const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
+    
+    // For cut operations, we don't need to check for same tab since the original was removed
+    // For copy operations, we don't want to paste to the same location
+    if (clipboard.type === 'copy' && sourceProjectId === targetProjectId && sourcePageId === targetPageId && sourceTabId === tab.id) {
+      return;
+    }
+    
+    const updatedProjects = projects.map(p => {
+      if (p.id === targetProjectId) {
+        return {
+          ...p,
+          pages: p.pages.map(pg => {
+            if (pg.id === targetPageId) {
+              // Check for duplicate names
+              const existingTabNames = pg.tabs.map(t => t.name);
+              let newTabName = tab.name;
+              
+              if (existingTabNames.includes(newTabName)) {
+                // Find a unique name
+                let counter = 1;
+                while (existingTabNames.includes(`${newTabName} ${counter}`)) {
+                  counter++;
+                }
+                newTabName = `${newTabName} ${counter}`;
+              }
+              
+              const newTabId = Date.now();
+              const newTab = {
+                ...tab,
+                id: newTabId,
+                name: newTabName,
+                active: false // New tab should not be active
+              };
+              
+              // Restore tab-specific data if it exists
+              if (tabData) {
+                const newTabKey = `${targetProjectId}_${targetPageId}_${newTabId}`;
+                
+                if (tabData.seismicData) {
+                  setSeismicTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.seismicData }
+                  }));
+                }
+                
+                if (tabData.seismicResults) {
+                  setSeismicResults(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.seismicResults }
+                  }));
+                }
+                
+                if (tabData.snowLoadData) {
+                  setSnowLoadTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.snowLoadData }
+                  }));
+                }
+                
+                if (tabData.windLoadData) {
+                  setWindLoadTabData(prev => ({
+                    ...prev,
+                    [newTabKey]: { ...tabData.windLoadData }
+                  }));
+                }
+              }
+              
+              // Find the target tab index and insert after it
+              const targetTabIndex = pg.tabs.findIndex(t => t.id === targetTabId);
+              const newTabs = [...pg.tabs];
+              newTabs.splice(targetTabIndex + 1, 0, newTab);
+              
+              return {
+                ...pg,
+                tabs: newTabs
+              };
+            }
+            return pg;
+          })
+        };
+      }
+      return p;
+    });
+    
+    setProjects(updatedProjects);
+    
+    // Clear clipboard after paste
+    if (clipboard.type === 'cut') {
+      setClipboard({ type: null, data: null });
+    }
+    
+    // Close context menu
+    setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
+  }, [clipboard, projects]);
+
+
+
   // Tab scroll functions
   const scrollTabsLeft = useCallback(() => {
     if (tabContainerRef.current) {
@@ -452,15 +874,7 @@ export default function HomePage() {
       const canScrollRight = scrollWidth > clientWidth;
       const isAtEnd = scrollLeft >= scrollWidth - clientWidth - 1;
       
-      console.log('Scroll check:', { 
-        scrollLeft, 
-        scrollWidth, 
-        clientWidth, 
-        canScrollRight,
-        isAtEnd,
-        showLeftArrow: scrollLeft > 0,
-        showRightArrow: canScrollRight && !isAtEnd
-      });
+
       
       setShowLeftArrow(scrollLeft > 0);
       setShowRightArrow(canScrollRight && !isAtEnd);
@@ -474,44 +888,7 @@ export default function HomePage() {
     }
   }, [checkScrollButtons]);
 
-  // Test function to create many tabs
-  const createTestTabs = () => {
-    const { projectId, pageId } = selectedPage;
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        return {
-          ...project,
-          pages: project.pages.map(page => {
-            if (page.id === pageId) {
-              const newTabs = [];
-              for (let i = 1; i <= 15; i++) {
-                newTabs.push({
-                  id: Date.now() + i,
-                  name: `Test Tab ${i}`,
-                  type: 'Design Tables',
-                  active: i === 1
-                });
-              }
-              return {
-                ...page,
-                tabs: newTabs
-              };
-            }
-            return page;
-          })
-        };
-      }
-      return project;
-    });
-    setProjects(updatedProjects);
-    setTestMode(true);
-    
-    // Force scroll check after a delay to ensure DOM is updated
-    setTimeout(() => {
-      checkScrollButtons();
-      console.log('Test tabs created, checking scroll...');
-    }, 300);
-  };
+
 
   useEffect(() => {
     if (isResizing) {
@@ -531,6 +908,12 @@ export default function HomePage() {
       setIsDragging(false);
       setDraggedTab(null);
       setDragOverTab(null);
+      setIsDraggingProject(false);
+      setDraggedProject(null);
+      setDragOverProject(null);
+      setIsDraggingPage(false);
+      setDraggedPage(null);
+      setDragOverPage(null);
     };
 
     document.addEventListener('dragend', handleGlobalDragEnd);
@@ -556,15 +939,7 @@ export default function HomePage() {
     return () => window.removeEventListener('resize', handleResize);
   }, [checkScrollButtons]);
 
-  // Force check scroll buttons when test tabs are created
-  useEffect(() => {
-    if (testMode) {
-      const timer = setTimeout(() => {
-        checkScrollButtons();
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [testMode, checkScrollButtons]);
+
 
   // Close context menu when clicking outside
   const handleClickOutside = useCallback((event) => {
@@ -615,10 +990,8 @@ export default function HomePage() {
           setUserId(data.userId);
           
           // Fetch user profile to ensure we have the latest data
-          try {
-            console.log('Fetching user profile after login for userId:', data.userId);
-            const profile = await userService.getUserProfile(data.userId);
-            console.log('User profile fetched after login:', profile);
+                  try {
+          const profile = await userService.getUserProfile(data.userId);
             setUsername(profile.username);
           } catch (error) {
             console.error('Failed to fetch user profile after login:', error);
@@ -1010,6 +1383,9 @@ export default function HomePage() {
           });
           setProjects(projectsAfterDelete);
           break;
+        case 'paste':
+          pasteTabFromClipboard(projectId, pageId);
+          break;
       }
     } else if (type === 'tab') {
       const tabId = itemId;
@@ -1019,6 +1395,9 @@ export default function HomePage() {
       const tab = page.tabs.find(t => t.id === tabId);
       
       switch (action) {
+        case 'rename':
+          setEditingItem({ type: 'tab', id: { projectId, pageId, tabId }, name: tab.name });
+          break;
         case 'copy':
           const existingTabNames = getExistingNames('tab', projectId, pageId);
           const newTabName = createCopy(tab.name, existingTabNames);
@@ -1179,6 +1558,15 @@ export default function HomePage() {
           });
           setProjects(updatedProjectsUnlock);
           break;
+        case 'copyToClipboard':
+          copyTabToClipboard(tabId, false);
+          break;
+        case 'cutToClipboard':
+          copyTabToClipboard(tabId, true);
+          break;
+        case 'pasteAfterThisTab':
+          pasteTabAfterSpecificTab(selectedPage.projectId, selectedPage.pageId, tabId);
+          break;
         case 'moveToStart':
           // Move tab to the beginning
           const updatedProjectsStart = projects.map(p => {
@@ -1315,6 +1703,31 @@ export default function HomePage() {
             pages: project.pages.map(page => {
               if (page.id === pageId) {
                 return { ...page, name: newName };
+              }
+              return page;
+            })
+          };
+        }
+        return project;
+      });
+      setProjects(updatedProjects);
+    } else if (editingItem.type === 'tab') {
+      const { projectId, pageId, tabId } = editingItem.id;
+      const updatedProjects = projects.map(project => {
+        if (project.id === projectId) {
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+              if (page.id === pageId) {
+                return {
+                  ...page,
+                  tabs: page.tabs.map(tab => {
+                    if (tab.id === tabId) {
+                      return { ...tab, name: newName };
+                    }
+                    return tab;
+                  })
+                };
               }
               return page;
             })
@@ -2023,10 +2436,9 @@ export default function HomePage() {
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-            <span className="text-white font-bold text-lg">N</span>
-          </div>
-          <span className="text-xl font-semibold text-gray-800">ProjectHub</span>
+          <span className="text-xl font-semibold text-gray-800">
+            Welcome, {username || 'User'}
+          </span>
         </div>
 
         {/* Center - Empty space */}
@@ -2084,7 +2496,10 @@ export default function HomePage() {
           {/* API Key Status Indicator */}
           <div className="relative">
             <button 
-              onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+              onClick={() => {
+                setSelectedSettingCategory('security');
+                setShowSettingsDropdown(true);
+              }}
               className={`flex items-center space-x-2 px-3 py-2 rounded-md transition ${
                 apiKeyLoading
                   ? 'bg-gray-50 text-gray-500 border border-gray-200 cursor-not-allowed'
@@ -2109,7 +2524,10 @@ export default function HomePage() {
           
           <div className="relative">
             <button 
-              onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+              onClick={() => {
+                setSelectedSettingCategory('general');
+                setShowSettingsDropdown(true);
+              }}
               className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" 
               title="Settings"
             >
@@ -2386,9 +2804,7 @@ export default function HomePage() {
                                           const newUsername = prompt('Enter new username:', username);
                                           if (newUsername && newUsername.trim()) {
                                             try {
-                                              console.log('Updating username to:', newUsername.trim());
                                               const result = await userService.updateProfile(userId, newUsername.trim());
-                                              console.log('Profile update result:', result);
                                               setUsername(newUsername.trim());
                                               showToastNotification('Username updated successfully!', 'success');
                                             } catch (error) {
@@ -2505,15 +2921,40 @@ export default function HomePage() {
               {projects.map(project => (
                 <div key={project.id} className="mb-2">
                   <div
-                    className="flex items-center justify-between p-2 rounded hover:bg-blue-50 cursor-pointer group"
-                    onClick={() => toggleProjectExpansion(project.id)}
+                    className={`flex items-center justify-between p-2 rounded cursor-pointer group ${
+                      selectedPage.projectId === project.id 
+                        ? 'bg-blue-100 border border-blue-300' 
+                        : 'hover:bg-blue-50'
+                    } ${
+                      isDraggingProject && draggedProject === project.id ? 'opacity-50' : ''
+                    } ${
+                      dragOverProject === project.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
+                    }`}
+                    style={{ 
+                      cursor: isDraggingProject ? 'grabbing' : 'grab'
+                    }}
+                    onClick={() => {
+                      if (!isDraggingProject) {
+                        toggleProjectExpansion(project.id);
+                      }
+                    }}
                     onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
+                    draggable={true}
+                    onDragStart={(e) => handleProjectDragStart(e, project.id)}
+                    onDragEnter={(e) => handleProjectDragOver(e, project.id)}
+                    onDragOver={(e) => handleProjectDragOver(e, project.id)}
+                    onDragLeave={handleProjectDragLeave}
+                    onDrop={(e) => handleProjectDrop(e, project.id)}
+                    onDragEnd={handleProjectDragEnd}
                   >
-                    <div className="flex items-center">
+                    <div className="flex items-center flex-1 min-w-0 overflow-hidden">
+                      <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                      </svg>
                       {project.pages.length > 0 && (
                         <svg 
                           style={{ width: '12px', height: '12px' }} 
-                          className={`text-gray-500 mr-2 transition-transform ${project.expanded ? 'rotate-90' : ''}`} 
+                          className={`text-gray-500 mr-2 transition-transform ${project.expanded ? 'rotate-90' : ''} flex-shrink-0`} 
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
@@ -2521,7 +2962,7 @@ export default function HomePage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       )}
-                      <svg style={{ width: '14px', height: '14px' }} className="text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg style={{ width: '14px', height: '14px' }} className="text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
                       {editingItem.type === 'project' && editingItem.id === project.id ? (
@@ -2537,12 +2978,28 @@ export default function HomePage() {
                               handleEditCancel();
                             }
                           }}
-                          className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500"
+                          className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
                           autoFocus
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
-                        <span className="text-sm text-gray-700">{project.name}</span>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <span 
+                            className={`text-sm block w-full ${
+                              selectedPage.projectId === project.id 
+                                ? 'text-blue-800 font-semibold' 
+                                : 'text-gray-700'
+                            }`}
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={project.name}
+                          >
+                            {project.name}
+                          </span>
+                        </div>
                       )}
                     </div>
                     <button
@@ -2559,45 +3016,178 @@ export default function HomePage() {
                     </button>
                   </div>
                   
+
+                  
+
+                  
                   {/* Project Pages */}
                   {project.expanded && (
                     <div className="ml-6 space-y-1">
+                      {/* Drop zone for empty project or before first page */}
+                      <div
+                        className={`h-2 rounded transition-colors ${
+                          dragOverPage?.projectId === project.id && dragOverPage?.pageId === 'empty' ? 'bg-green-200 border border-green-400' : 'bg-transparent'
+                        }`}
+                        style={{ marginLeft: '20px' }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'empty')) {
+                            setDragOverPage({ projectId: project.id, pageId: 'empty' });
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (dragOverPage?.projectId === project.id && dragOverPage?.pageId === 'empty') {
+                            setDragOverPage(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'empty')) {
+                            handlePageDrop(e, project.id, 'empty');
+                          }
+                        }}
+                      />
+                      
                       {project.pages.map((page, index) => (
-                        <div
-                          key={page.id}
-                          className={`flex items-center p-1.5 rounded hover:bg-green-50 cursor-pointer ${
-                            selectedPage.projectId === project.id && selectedPage.pageId === page.id 
-                              ? 'bg-green-100 border border-green-300' 
-                              : ''
-                          }`}
-                          onClick={() => selectPage(project.id, page.id)}
-                          onContextMenu={(e) => handlePageContextMenu(e, project.id, page.id)}
-                          style={{ marginLeft: '20px' }}
-                        >
-                          <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          {editingItem.type === 'page' && editingItem.id.projectId === project.id && editingItem.id.pageId === page.id ? (
-                            <input
-                              type="text"
-                              value={editingItem.name}
-                              onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                              onBlur={() => handleEditSave(editingItem.name)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleEditSave(editingItem.name);
-                                } else if (e.key === 'Escape') {
-                                  handleEditCancel();
+                        <div key={page.id}>
+                          {/* Drop zone between pages */}
+                          {index > 0 && (
+                            <div
+                              className={`h-2 rounded transition-colors ${
+                                dragOverPage?.projectId === project.id && dragOverPage?.pageId === `between-${page.id}` ? 'bg-green-200 border border-green-400' : 'bg-transparent'
+                              }`}
+                              style={{ marginLeft: '20px' }}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== `between-${page.id}`)) {
+                                  setDragOverPage({ projectId: project.id, pageId: `between-${page.id}` });
                                 }
                               }}
-                              className="text-xs text-gray-600 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1"
-                              autoFocus
+                              onDragLeave={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (dragOverPage?.projectId === project.id && dragOverPage?.pageId === `between-${page.id}`) {
+                                  setDragOverPage(null);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== `between-${page.id}`)) {
+                                  handlePageDrop(e, project.id, `between-${page.id}`);
+                                }
+                              }}
                             />
-                          ) : (
-                            <span className="text-xs text-gray-600 flex-1">{page.name}</span>
                           )}
+                          
+                          <div
+                            className={`flex items-center p-1.5 rounded cursor-pointer group ${
+                              selectedPage.projectId === project.id && selectedPage.pageId === page.id 
+                                ? 'bg-green-100 border border-green-300' 
+                                : 'hover:bg-green-50'
+                            } ${
+                              isDraggingPage && draggedPage?.projectId === project.id && draggedPage?.pageId === page.id ? 'opacity-50' : ''
+                            } ${
+                              dragOverPage?.projectId === project.id && dragOverPage?.pageId === page.id ? 'border-l-2 border-l-green-500 bg-green-100' : ''
+                            }`}
+                            style={{ 
+                              marginLeft: '20px',
+                              cursor: isDraggingPage ? 'grabbing' : 'grab'
+                            }}
+                            onClick={() => {
+                              if (!isDraggingPage) {
+                                selectPage(project.id, page.id);
+                              }
+                            }}
+                            onContextMenu={(e) => handlePageContextMenu(e, project.id, page.id)}
+                            draggable={true}
+                            onDragStart={(e) => handlePageDragStart(e, project.id, page.id)}
+                            onDragEnter={(e) => handlePageDragOver(e, project.id, page.id)}
+                            onDragOver={(e) => handlePageDragOver(e, project.id, page.id)}
+                            onDragLeave={handlePageDragLeave}
+                            onDrop={(e) => handlePageDrop(e, project.id, page.id)}
+                            onDragEnd={handlePageDragEnd}
+                          >
+                            <svg style={{ width: '10px', height: '10px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {editingItem.type === 'page' && editingItem.id.projectId === project.id && editingItem.id.pageId === page.id ? (
+                              <input
+                                type="text"
+                                value={editingItem.name}
+                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                onBlur={() => handleEditSave(editingItem.name)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleEditSave(editingItem.name);
+                                  } else if (e.key === 'Escape') {
+                                    handleEditCancel();
+                                  }
+                                }}
+                                className="text-xs text-gray-600 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                                autoFocus
+                              />
+                            ) : (
+                              <div className="flex-1 min-w-0 overflow-hidden">
+                                <span 
+                                  className={`text-xs block w-full ${
+                                    selectedPage.projectId === project.id && selectedPage.pageId === page.id 
+                                      ? 'text-green-800 font-semibold' 
+                                      : 'text-gray-600'
+                                  }`}
+                                  style={{
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={page.name}
+                                >
+                                  {page.name}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
+                      
+                      {/* Drop zone after last page */}
+                      {project.pages.length > 0 && (
+                        <div
+                          className={`h-2 rounded transition-colors ${
+                            dragOverPage?.projectId === project.id && dragOverPage?.pageId === 'end' ? 'bg-green-200 border border-green-400' : 'bg-transparent'
+                          }`}
+                          style={{ marginLeft: '20px' }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'end')) {
+                              setDragOverPage({ projectId: project.id, pageId: 'end' });
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (dragOverPage?.projectId === project.id && dragOverPage?.pageId === 'end') {
+                              setDragOverPage(null);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'end')) {
+                              handlePageDrop(e, project.id, 'end');
+                            }
+                          }}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -2680,16 +3270,42 @@ export default function HomePage() {
                       onDrop={(e) => handleTabDrop(e, tab.id)}
                       onDragEnd={handleTabDragEnd}
                     >
-                      <div className="flex items-center flex-1 min-w-0">
+                      <div className="flex items-center flex-1 min-w-0 overflow-hidden">
                         <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                         </svg>
-                        <span 
-                          className="text-sm text-gray-700 truncate"
-                          title={tab.name}
-                        >
-                          {tab.name}
-                        </span>
+                        {editingItem.type === 'tab' && editingItem.id.projectId === selectedPage.projectId && editingItem.id.pageId === selectedPage.pageId && editingItem.id.tabId === tab.id ? (
+                          <input
+                            type="text"
+                            value={editingItem.name}
+                            onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                            onBlur={() => handleEditSave(editingItem.name)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleEditSave(editingItem.name);
+                              } else if (e.key === 'Escape') {
+                                handleEditCancel();
+                              }
+                            }}
+                            className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <span 
+                              className="text-sm text-gray-700 block w-full"
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={tab.name}
+                            >
+                              {tab.name}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       {currentTabs.length > 1 && !tab.locked && (
                         <button
@@ -2794,13 +3410,42 @@ export default function HomePage() {
                             onDrop={(e) => handleDropdownDrop(e, tab.id)}
                             onDragEnd={handleDropdownDragEnd}
                           >
-                            <div className="flex items-center flex-1 min-w-0">
+                            <div className="flex items-center flex-1 min-w-0 overflow-hidden">
                               <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                               </svg>
-                              <span className="text-sm text-gray-700 truncate" title={tab.name}>
-                                {tab.name}
-                              </span>
+                              {editingItem.type === 'tab' && editingItem.id.projectId === selectedPage.projectId && editingItem.id.pageId === selectedPage.pageId && editingItem.id.tabId === tab.id ? (
+                                <input
+                                  type="text"
+                                  value={editingItem.name}
+                                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                  onBlur={() => handleEditSave(editingItem.name)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleEditSave(editingItem.name);
+                                    } else if (e.key === 'Escape') {
+                                      handleEditCancel();
+                                    }
+                                  }}
+                                  className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                  <span 
+                                    className="text-sm text-gray-700 block w-full"
+                                    style={{
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title={tab.name}
+                                  >
+                                    {tab.name}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             {currentTabs.length > 1 && !tab.locked && (
                               <button
@@ -2847,7 +3492,61 @@ export default function HomePage() {
 
           {/* Tab Content */}
           <div className="flex-1 p-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            {(() => {
+              const currentProject = projects.find(p => p.id === selectedPage.projectId);
+              const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
+              
+              // No projects
+              if (projects.length === 0) {
+                return (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No projects yet</h3>
+                      <p className="text-gray-600">Create your first project and its page to start</p>
+                    </div>
+                  </div>
+                );
+              }
+              
+              // Check if any project has pages
+              const hasAnyPages = projects.some(project => project.pages.length > 0);
+              
+              // Have projects but no pages in any project
+              if (!hasAnyPages) {
+                return (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No pages yet</h3>
+                      <p className="text-gray-600">Add a page to your project to create tabs</p>
+                    </div>
+                  </div>
+                );
+              }
+              
+              // Have pages but no page is selected
+              if (!currentPage) {
+                return (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a page</h3>
+                      <p className="text-gray-600">Choose a page from the sidebar to manage tabs</p>
+                    </div>
+                  </div>
+                );
+              }
+              
+              // Have projects and pages, show tab content
+              return (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
                   <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2897,8 +3596,7 @@ export default function HomePage() {
                       slope: 1,
                       is: 1,
                       ca: 1,
-                      cb: 0.8,
-                      cw: 1
+                      cb: 0.8
                     };
                     const data = { ...snowDefaults, ...(snowLoadTabData[tabKey] || {}) };
                     
@@ -2957,7 +3655,7 @@ export default function HomePage() {
                     driftData.Sr = srLive;            // B8
                     driftData.γ = gammaLive;          // B10
                     driftData.Cb = data.cb;           // B6
-                    driftData.Cw = data.cw;           // B12
+                    driftData.Cw = driftData.Cw;      // B12 - Use the value from driftDefaults
                     driftData.Cs_default = csLive;    // B13
                     driftData.Is = data.is;           // B4
                     // Keep an explicit field for display-only distribution table
@@ -3054,7 +3752,7 @@ export default function HomePage() {
                     const gamma = Math.min(4, 0.43 * ss + 2.2);
                     const limitHeight = 1 + ss / gamma;
                     const cs = alpha <= 30 ? 1 : (alpha > 70 ? 0 : (70 - alpha) / 40);
-                    const ssCombined = ss * data.cb * data.cw * cs * data.ca;
+                    const ssCombined = ss * data.cb * driftData.Cw * cs * data.ca;
                     const snowLoad = data.is * (ssCombined + Math.min(sr, ssCombined));
                     const snowLoadPsf = snowLoad * 20.88543;
                     const snowLoadPart9 = Math.max(0.55 * ss + sr, 1);
@@ -3134,17 +3832,7 @@ export default function HomePage() {
                                 <span className="text-xs text-gray-600">(1) Cb=0.8 if smaller dimension of roof w≤35m (115'); (2) Cb=1.0 if roof height ≤ Limit. Height ≈ 2m (6.5'); (3) Otherwise, refer to the Code.</span>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-2 items-center">
-                                <label className="text-sm font-medium">Cw</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
-                                  value={data.cw}
-                                  onChange={e => handleSnowChange('cw', parseFloat(e.target.value) || 0)}
-                                />
-                                <span className="text-xs text-gray-600">Conservative</span>
-                              </div>
+
                             </div>
                             
                             {snowLoadError && (
@@ -3188,7 +3876,7 @@ export default function HomePage() {
                               <hr className="border-gray-200" />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Cw</span>
-                                <span className="font-mono">{Number(data.cw).toFixed(2)}</span>
+                                <span className="font-mono">{Number(driftData.Cw).toFixed(2)}</span>
                                 <span className="text-xs text-gray-600">Conservative</span>
                               </div>
                               <hr className="border-gray-200" />
@@ -4349,6 +5037,8 @@ export default function HomePage() {
                 })()}
               </div>
             </div>
+          );
+            })()}
           </div>
         </div>
       </div>
@@ -4429,11 +5119,33 @@ export default function HomePage() {
                 </svg>
                 <span>Delete</span>
               </button>
+              
+              {clipboard.type && (
+                <button
+                  onClick={() => handleContextMenuAction('paste')}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Paste Tab</span>
+                </button>
+              )}
             </>
           )}
           
           {contextMenu.type === 'tab' && (
             <>
+              <button
+                onClick={() => handleContextMenuAction('rename')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Rename</span>
+              </button>
+              
               <button
                 onClick={() => handleContextMenuAction('copy')}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
@@ -4441,8 +5153,40 @@ export default function HomePage() {
                 <svg style={{ width: '14px', height: '14px' }} className="text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span>Copy</span>
+                <span>Copy this tab</span>
               </button>
+              
+              <button
+                onClick={() => handleContextMenuAction('copyToClipboard')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Copy to Clipboard</span>
+              </button>
+              
+              <button
+                onClick={() => handleContextMenuAction('cutToClipboard')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+              >
+                <svg style={{ width: '14px', height: '14px' }} className="text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Cut to Clipboard</span>
+              </button>
+              
+              {clipboard.type && (
+                <button
+                  onClick={() => handleContextMenuAction('pasteAfterThisTab')}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Paste after this tab</span>
+                </button>
+              )}
               
               <div className="border-t border-gray-200 my-1"></div>
               
@@ -4886,11 +5630,15 @@ export default function HomePage() {
           <div className={`flex items-center space-x-3 px-4 py-3 rounded-lg shadow-lg border pointer-events-auto ${
             toastType === 'success' 
               ? 'bg-green-50 border-green-200 text-green-800' 
+              : toastType === 'info'
+              ? 'bg-blue-50 border-blue-200 text-blue-800'
               : 'bg-red-50 border-red-200 text-red-800'
           }`}>
             <svg style={{ width: '20px', height: '20px' }} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {toastType === 'success' ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              ) : toastType === 'info' ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               ) : (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               )}
