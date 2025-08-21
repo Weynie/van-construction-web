@@ -67,6 +67,9 @@ public class SecurityConfig {
             // allow profile update endpoint (requires authentication)
                             .requestMatchers("/api/users/*/profile").authenticated()
 
+            // allow workspace endpoints (requires authentication)
+            .requestMatchers("/api/workspace/**").authenticated()
+
             // allow OPTIONS on everything (for CORS preflight)
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 

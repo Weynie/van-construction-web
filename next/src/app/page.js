@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { apiKeyService } from '../services/apiKeyService';
 import { userService } from '../services/userService';
+import { workspaceStateService } from '../services/workspaceStateService';
+import { tabTemplateService } from '../services/tabTemplateService';
+import { workspaceApiService } from '../services/workspaceApiService';
 import ApiKeyInput from '../components/ApiKeyInput';
 
 // Add CSS for hiding scrollbars
@@ -65,37 +68,8 @@ export default function HomePage() {
   
 
   
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      name: 'Project 1',
-      pages: [
-        { 
-          id: 1, 
-          name: 'Page 1',
-          tabs: [
-            { id: 1, name: 'Welcome', type: 'Welcome', active: true }
-          ]
-        }
-      ],
-      expanded: false
-    },
-    {
-      id: 2,
-      name: 'Project 2',
-      pages: [
-        { 
-          id: 2, 
-          name: 'Page 1',
-          tabs: [
-            { id: 2, name: 'Welcome', type: 'Welcome', active: true }
-          ]
-        }
-      ],
-      expanded: false
-    }
-  ]);
-  const [selectedPage, setSelectedPage] = useState({ projectId: 1, pageId: 1 });
+  const [projects, setProjects] = useState([]);
+  const [selectedPage, setSelectedPage] = useState({ projectId: null, pageId: null });
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, type: '', itemId: null });
   const [editingItem, setEditingItem] = useState({ type: '', id: null, name: '' });
   
@@ -145,6 +119,11 @@ export default function HomePage() {
   // Language dropdown state
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('Auto-detect');
+  
+  // Workspace state management
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState(null);
 
   // Check for existing authentication on component mount
   useEffect(() => {
@@ -161,6 +140,9 @@ export default function HomePage() {
           try {
             const profile = await userService.getUserProfile(userId);
             setUsername(profile.username);
+            
+            // Initialize workspace after successful authentication
+            await initializeWorkspace();
           } catch (error) {
             console.error('Failed to fetch user profile:', error);
             // If profile fetch fails, user might not be authenticated anymore
@@ -177,6 +159,327 @@ export default function HomePage() {
     
     checkAuthentication();
   }, []);
+
+  // Initialize workspace data
+  const initializeWorkspace = async () => {
+    try {
+      console.log('🚀 Starting workspace initialization...');
+      setWorkspaceLoading(true);
+      setWorkspaceError(null);
+      
+      const workspaceData = await workspaceStateService.loadWorkspaceData();
+      console.log('📊 Loaded workspace data:', workspaceData);
+      
+      if (workspaceData.projects && workspaceData.projects.length > 0) {
+        console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
+        
+        // Find the active tab to jump to last used tab
+        let activeTabFound = false;
+        let targetProject = null;
+        let targetPage = null;
+        let activeTabId = null;
+        
+        for (const project of workspaceData.projects) {
+          if (project.pages) {
+            for (const page of project.pages) {
+              if (page.tabs) {
+                const activeTab = page.tabs.find(tab => tab.isActive || tab.active);
+                if (activeTab) {
+                  targetProject = project;
+                  targetPage = page;
+                  activeTabId = activeTab.id;
+                  activeTabFound = true;
+                  console.log('🎯 Found active tab:', activeTab.name, 'in page:', page.name);
+                  break;
+                }
+              }
+            }
+            if (activeTabFound) break;
+          }
+        }
+        
+        if (activeTabFound && targetProject && targetPage) {
+          // Jump to the page with active tab
+          console.log('📄 Jumping to page with active tab:', targetPage.name);
+          setSelectedPage({ projectId: targetProject.id, pageId: targetPage.id });
+          
+          // Update the projects state to ensure the active tab is marked correctly in UI
+          const updatedProjects = workspaceData.projects.map(project => {
+            if (project.id === targetProject.id) {
+              return {
+                ...project,
+                pages: (project.pages || []).map(page => {
+                  if (page.id === targetPage.id) {
+                    return {
+                      ...page,
+                      tabs: (page.tabs || []).map(tab => ({
+                        ...tab,
+                        active: tab.id === activeTabId,
+                        isActive: tab.id === activeTabId
+                      }))
+                    };
+                  }
+                  return {
+                    ...page,
+                    tabs: (page.tabs || []).map(tab => ({
+                      ...tab,
+                      active: false,
+                      isActive: false
+                    }))
+                  };
+                })
+              };
+            }
+            return {
+              ...project,
+              pages: (project.pages || []).map(page => ({
+                ...page,
+                tabs: (page.tabs || []).map(tab => ({
+                  ...tab,
+                  active: false,
+                  isActive: false
+                }))
+              }))
+            };
+          });
+          setProjects(updatedProjects);
+          console.log('✅ Active tab state restored in UI:', activeTabId);
+        } else {
+          // Fallback to first available page
+          setProjects(workspaceData.projects); // Set projects without active tab modification
+          const firstProject = workspaceData.projects[0];
+          if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+            const firstPage = firstProject.pages[0];
+            console.log('📄 Setting default selected page:', firstPage.name);
+            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+          }
+        }
+      } else {
+        console.log('📝 No existing projects, initializing default workspace...');
+        // Initialize workspace with default structure
+        await workspaceStateService.initializeWorkspace();
+        // Reload data after initialization
+        const initializedData = await workspaceStateService.loadWorkspaceData();
+        console.log('✅ Setting initialized projects:', initializedData.projects);
+        setProjects(initializedData.projects);
+        
+        if (initializedData.projects && initializedData.projects.length > 0) {
+          const firstProject = initializedData.projects[0];
+          if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+            const firstPage = firstProject.pages[0];
+            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+          }
+        }
+      }
+      
+      setWorkspaceLoaded(true);
+      console.log('🎉 Workspace initialization completed!');
+    } catch (error) {
+      console.error('❌ Error initializing workspace:', error);
+      setWorkspaceError(error.message);
+      showToastNotification('Failed to load workspace: ' + error.message, 'error');
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
+
+  // Workspace state listener
+  useEffect(() => {
+    const unsubscribe = workspaceStateService.addListener((change) => {
+      switch (change.type) {
+        case 'PROJECT_CREATED_OPTIMISTIC':
+          setProjects(prev => [...prev, change.project]);
+          break;
+          
+        case 'PROJECT_CREATED':
+          setProjects(prev => prev.map(p => 
+            p.id === change.tempId ? change.project : p
+          ));
+          break;
+          
+        case 'PROJECT_CREATE_FAILED':
+          setProjects(prev => prev.filter(p => p.id !== change.tempId));
+          showToastNotification('Failed to create project: ' + change.error, 'error');
+          break;
+          
+        case 'PROJECT_UPDATED_OPTIMISTIC':
+          setProjects(prev => prev.map(p => {
+            if (p.id === change.projectId) {
+              // Preserve nested data (pages, tabs) during optimistic update
+              return { 
+                ...p, 
+                ...change.updates,
+                pages: p.pages  // Explicitly preserve the existing pages array
+              };
+            }
+            return p;
+          }));
+          break;
+          
+        case 'PROJECT_UPDATED':
+          setProjects(prev => prev.map(p => {
+            if (p.id === change.project.id) {
+              // Preserve nested data (pages, tabs) when updating project properties
+              return { 
+                ...p, 
+                ...change.project,
+                pages: p.pages  // Explicitly preserve the existing pages array
+              };
+            }
+            return p;
+          }));
+          break;
+          
+        case 'PROJECT_DELETED':
+          setProjects(prev => prev.filter(p => p.id !== change.projectId));
+          // Update selected page if the deleted project was selected
+          if (selectedPage.projectId === change.projectId) {
+            const remainingProjects = projects.filter(p => p.id !== change.projectId);
+            if (remainingProjects.length > 0) {
+              const firstProject = remainingProjects[0];
+              if (firstProject.pages && firstProject.pages.length > 0) {
+                setSelectedPage({ projectId: firstProject.id, pageId: firstProject.pages[0].id });
+              }
+            } else {
+              setSelectedPage({ projectId: null, pageId: null });
+            }
+          }
+          break;
+          
+        case 'PAGE_CREATED_OPTIMISTIC':
+          setProjects(prev => prev.map(project => 
+            project.id === change.page.projectId 
+              ? { ...project, pages: [...(project.pages || []), change.page] }
+              : project
+          ));
+          break;
+          
+        case 'PAGE_CREATED':
+          setProjects(prev => prev.map(project => 
+            project.id === change.page.projectId 
+              ? { 
+                  ...project, 
+                  pages: (project.pages || []).map(p => 
+                    p.id === change.tempId ? change.page : p
+                  )
+                }
+              : project
+          ));
+          break;
+          
+        case 'PAGE_UPDATED_OPTIMISTIC':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => 
+              page.id === change.pageId 
+                ? { ...page, ...change.updates }
+                : page
+            )
+          })));
+          break;
+          
+        case 'PAGE_UPDATED':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => 
+              page.id === change.page.id 
+                ? { ...page, ...change.page }
+                : page
+            )
+          })));
+          break;
+          
+        case 'TAB_CREATED_OPTIMISTIC':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => 
+              page.id === change.tab.pageId 
+                ? { ...page, tabs: [...(page.tabs || []), change.tab] }
+                : page
+            )
+          })));
+          break;
+          
+        case 'TAB_CREATED':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => 
+              page.id === change.tab.pageId 
+                ? { 
+                    ...page, 
+                    tabs: (page.tabs || []).map(t => 
+                      t.id === change.tempId ? change.tab : t
+                    )
+                  }
+                : page
+            )
+          })));
+          break;
+          
+        case 'TAB_UPDATED_OPTIMISTIC':
+          console.log('🔄 TAB_UPDATED_OPTIMISTIC:', change.tabId, 'updates:', change.updates);
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => ({
+              ...page,
+              tabs: (page.tabs || []).map(tab => {
+                if (tab.id === change.tabId) {
+                  console.log('📝 Before update:', { name: tab.name, mergedData: !!tab.mergedData });
+                  const updatedTab = { ...tab, ...change.updates };
+                  console.log('📝 After update:', { name: updatedTab.name, mergedData: !!updatedTab.mergedData });
+                  return updatedTab;
+                }
+                return tab;
+              })
+            }))
+          })));
+          break;
+          
+        case 'TAB_UPDATED':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => ({
+              ...page,
+              tabs: (page.tabs || []).map(tab => 
+                tab.id === change.tab.id 
+                  ? { 
+                      ...tab, 
+                      ...change.tab, 
+                      locked: change.tab.isLocked, // Map backend isLocked to frontend locked
+                      mergedData: change.mergedData 
+                    }
+                  : tab
+              )
+            }))
+          })));
+          break;
+
+        case 'TAB_DATA_UPDATED_OPTIMISTIC':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => ({
+              ...page,
+              tabs: (page.tabs || []).map(tab => 
+                tab.id === change.tabId 
+                  ? { ...tab, mergedData: change.data }
+                  : tab
+              )
+            }))
+          })));
+          break;
+          
+        case 'NOTIFICATION':
+          showToastNotification(change.message, change.notificationType);
+          break;
+          
+        default:
+          // Handle other state changes as needed
+          break;
+      }
+    });
+    
+    return unsubscribe;
+  }, [selectedPage, projects]);
   
   // Settings dropdown state
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
@@ -408,12 +711,14 @@ export default function HomePage() {
     setDragOverTab(null);
   }, []);
 
-  const handleTabDrop = useCallback((e, targetTabId) => {
+  const handleTabDrop = useCallback(async (e, targetTabId) => {
     e.preventDefault();
     e.stopPropagation();
     
     if (draggedTab && draggedTab !== targetTabId) {
       const { projectId, pageId } = selectedPage;
+      let reorderedTabIds = null;
+      
       const updatedProjects = projects.map(project => {
         if (project.id === projectId) {
           return {
@@ -427,6 +732,9 @@ export default function HomePage() {
                 if (draggedIndex !== -1 && targetIndex !== -1) {
                   const [draggedTabItem] = tabs.splice(draggedIndex, 1);
                   tabs.splice(targetIndex, 0, draggedTabItem);
+                  
+                  // Store the new order for database save
+                  reorderedTabIds = tabs.map(tab => tab.id);
                 }
                 
                 return {
@@ -440,7 +748,18 @@ export default function HomePage() {
         }
         return project;
       });
+      
       setProjects(updatedProjects);
+      
+      // Save new tab order to database (outside of map function)
+      if (reorderedTabIds) {
+        try {
+          await workspaceStateService.updateTabOrder(pageId, reorderedTabIds);
+        } catch (error) {
+          console.error('Error saving tab order:', error);
+          showToastNotification('Failed to save tab order: ' + error.message, 'error');
+        }
+      }
     }
     setIsDragging(false);
     setDraggedTab(null);
@@ -476,7 +795,7 @@ export default function HomePage() {
     setDragOverProject(null);
   }, []);
 
-  const handleProjectDrop = useCallback((e, targetProjectId) => {
+  const handleProjectDrop = useCallback(async (e, targetProjectId) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -489,6 +808,15 @@ export default function HomePage() {
         const [draggedProjectItem] = updatedProjects.splice(draggedIndex, 1);
         updatedProjects.splice(targetIndex, 0, draggedProjectItem);
         setProjects(updatedProjects);
+        
+        // Save new project order to database
+        const projectIds = updatedProjects.map(p => p.id);
+        try {
+          await workspaceStateService.updateProjectOrder(projectIds);
+        } catch (error) {
+          console.error('Error saving project order:', error);
+          showToastNotification('Failed to save project order: ' + error.message, 'error');
+        }
       }
     }
     setIsDraggingProject(false);
@@ -525,7 +853,7 @@ export default function HomePage() {
     setDragOverPage(null);
   }, []);
 
-  const handlePageDrop = useCallback((e, targetProjectId, targetPageId) => {
+  const handlePageDrop = useCallback(async (e, targetProjectId, targetPageId) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -557,16 +885,21 @@ export default function HomePage() {
           
           if (targetPageId === 'empty' || targetPageId === 'end') {
             // Add to end of target project
-            targetPageIndex = targetProject.pages.length;
+            targetPageIndex = targetProject.pages ? targetProject.pages.length : 0;
           } else if (typeof targetPageId === 'string' && targetPageId.startsWith('between-')) {
             // Add between pages - find the page after the "between" indicator
             const afterPageId = targetPageId.replace('between-', '');
-            const afterPageIndex = targetProject.pages.findIndex(p => p.id === parseInt(afterPageId));
-            targetPageIndex = afterPageIndex !== -1 ? afterPageIndex : targetProject.pages.length;
+            const afterPageIndex = targetProject.pages ? targetProject.pages.findIndex(p => p.id === parseInt(afterPageId)) : -1;
+            targetPageIndex = afterPageIndex !== -1 ? afterPageIndex : (targetProject.pages ? targetProject.pages.length : 0);
           } else {
             // Regular page drop - find the target page
-            const actualTargetPageIndex = targetProject.pages.findIndex(p => p.id === parseInt(targetPageId));
-            targetPageIndex = actualTargetPageIndex !== -1 ? actualTargetPageIndex : targetProject.pages.length;
+            const actualTargetPageIndex = targetProject.pages ? targetProject.pages.findIndex(p => p.id === parseInt(targetPageId)) : -1;
+            targetPageIndex = actualTargetPageIndex !== -1 ? actualTargetPageIndex : (targetProject.pages ? targetProject.pages.length : 0);
+          }
+          
+          // Initialize pages array if it doesn't exist
+          if (!targetProject.pages) {
+            targetProject.pages = [];
           }
           
           // Add page to target project at the target position
@@ -577,6 +910,22 @@ export default function HomePage() {
           // Update selected page if it was the dragged page
           if (selectedPage.projectId === draggedPage.projectId && selectedPage.pageId === draggedPage.pageId) {
             setSelectedPage({ projectId: targetProjectId, pageId: draggedPage.pageId });
+          }
+          
+          // Save new page order to database
+          try {
+            // Update order for target project
+            const targetPageIds = targetProject.pages.map(p => p.id);
+            await workspaceStateService.updatePageOrder(targetProjectId, targetPageIds);
+            
+            // If page moved between projects, also update source project order
+            if (draggedPage.projectId !== targetProjectId) {
+              const sourcePageIds = sourceProject.pages.map(p => p.id);
+              await workspaceStateService.updatePageOrder(draggedPage.projectId, sourcePageIds);
+            }
+          } catch (error) {
+            console.error('Error saving page order:', error);
+            showToastNotification('Failed to save page order: ' + error.message, 'error');
           }
           
           // No toast notification needed for page rename
@@ -597,20 +946,21 @@ export default function HomePage() {
   }, []);
 
   // Copy/Cut and paste functions for tabs
-  const copyTabToClipboard = useCallback((tabId, isCut = false) => {
+  const copyTabToClipboard = useCallback(async (tabId, isCut = false) => {
     const { projectId, pageId } = selectedPage;
     const project = projects.find(p => p.id === projectId);
     const page = project?.pages.find(p => p.id === pageId);
     const tab = page?.tabs.find(t => t.id === tabId);
     
     if (tab) {
-      // Collect all tab-specific data
+      // Collect all tab-specific data including merged data
       const originalTabKey = `${projectId}_${pageId}_${tabId}`;
       const tabData = {
         seismicData: seismicTabData[originalTabKey] || null,
         seismicResults: seismicResults[originalTabKey] || null,
         snowLoadData: snowLoadTabData[originalTabKey] || null,
-        windLoadData: windLoadTabData[originalTabKey] || null
+        windLoadData: windLoadTabData[originalTabKey] || null,
+        mergedData: tab.mergedData || null  // Include the complete merged data
       };
       
       const clipboardData = {
@@ -624,9 +974,17 @@ export default function HomePage() {
         }
       };
       setClipboard(clipboardData);
+      console.log('✅ Tab copied to clipboard:', { 
+        operation: isCut ? 'cut' : 'copy', 
+        tabName: tab.name, 
+        hasData: !!tabData.mergedData,
+        clipboardSet: true 
+      });
       
-      // If it's a cut operation, remove the tab from source
+      // If it's a cut operation, remove the tab from source (but keep in clipboard)
       if (isCut) {
+        // For cut, we'll remove from UI but NOT delete from backend yet
+        // The backend deletion will happen only when paste is completed
         const updatedProjects = projects.map(p => {
           if (p.id === projectId) {
             return {
@@ -652,33 +1010,41 @@ export default function HomePage() {
           return p;
         });
         setProjects(updatedProjects);
+        console.log('✅ Tab removed from UI for cut operation (keeping data intact):', tabId);
       }
     }
   }, [projects, selectedPage]);
 
-  const pasteTabFromClipboard = useCallback((targetProjectId, targetPageId) => {
-    if (!clipboard.data || clipboard.type === null) return;
+  const pasteTabFromClipboard = useCallback(async (targetProjectId, targetPageId) => {
+    console.log('🔄 Attempting to paste tab from clipboard:', { 
+      hasClipboard: !!clipboard.data, 
+      clipboardType: clipboard.type,
+      targetProjectId,
+      targetPageId 
+    });
+    if (!clipboard.data || clipboard.type === null) {
+      console.log('❌ No clipboard data available');
+      return;
+    }
     
     const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
     
     // For cut operations, we don't need to check for same tab since the original was removed
-    // For copy operations, we don't want to paste to the same location
-    if (clipboard.type === 'copy' && sourceProjectId === targetProjectId && sourcePageId === targetPageId && sourceTabId === tab.id) {
-      return;
-    }
+    // For copy operations, we now allow pasting to the same page (but not to the exact same tab)
+    // This check is removed to allow same-page copying
     
-    const updatedProjects = projects.map(p => {
-      if (p.id === targetProjectId) {
-        return {
-          ...p,
-          pages: p.pages.map(pg => {
-            if (pg.id === targetPageId) {
               // Check for duplicate names
-              const existingTabNames = pg.tabs.map(t => t.name);
+    const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
+    if (!targetPage) return;
+    
+    const existingTabNames = targetPage.tabs.map(t => t.name);
               let newTabName = tab.name;
               
-              if (existingTabNames.includes(newTabName)) {
-                // Find a unique name
+              // For copy operations, add "Copy" suffix to make it clear it's a copy
+              if (clipboard.type === 'copy') {
+                newTabName = createCopy(tab.name, existingTabNames);
+              } else if (existingTabNames.includes(newTabName)) {
+                // For cut operations, only modify name if there's a conflict
                 let counter = 1;
                 while (existingTabNames.includes(`${newTabName} ${counter}`)) {
                   counter++;
@@ -686,46 +1052,86 @@ export default function HomePage() {
                 newTabName = `${newTabName} ${counter}`;
               }
               
-              const newTabId = Date.now();
+    if (isCutOperation) {
+      // For cut operation: Delete original first, then create new with preserved data
+      try {
+        console.log('🔄 Starting cut/paste operation for tab:', tab.id, 'name:', tab.name);
+        
+        // Step 1: Delete the original tab from backend to avoid name conflicts
+        await workspaceStateService.deleteTab(tab.id);
+        console.log('✅ Original tab deleted from backend:', tab.id);
+        
+        // Step 2: Wait a moment to ensure deletion is processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Step 3: Create new tab in target location with potentially same name
+        console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
+        const movedTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        console.log('✅ New tab created in target location:', movedTab.id);
+        
+        // Step 4: Restore the original data to the new tab
+        if (tabData && tabData.mergedData) {
+          await workspaceStateService.updateTabData(movedTab.id, tab.tabType || tab.type, tabData.mergedData);
+          console.log('✅ Original data restored to new tab');
+        }
+        
+        // Step 4: Update local state with moved tab
+        const updatedProjects = projects.map(p => {
+          if (p.id === targetProjectId) {
+            return {
+              ...p,
+              pages: p.pages.map(pg => {
+                if (pg.id === targetPageId) {
               const newTab = {
-                ...tab,
-                id: newTabId,
+                    ...movedTab,
                 name: newTabName,
-                active: false // New tab should not be active
-              };
-              
-              // Restore tab-specific data if it exists
-              if (tabData) {
-                const newTabKey = `${targetProjectId}_${targetPageId}_${newTabId}`;
-                
-                if (tabData.seismicData) {
-                  setSeismicTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.seismicData }
-                  }));
+                    active: false,
+                    isActive: false,
+                    mergedData: tabData?.mergedData  // Preserve the original data
+                  };
+                  
+                  return {
+                    ...pg,
+                    tabs: [...pg.tabs, newTab]
+                  };
+                }
+                return pg;
+              })
+            };
+          }
+          return p;
+        });
+        
+        setProjects(updatedProjects);
+        console.log('✅ Tab moved successfully (cut/paste):', newTabName);
+      } catch (error) {
+        console.error('❌ Failed to move tab:', error);
+        showToastNotification('Failed to move tab: ' + error.message, 'error');
+                }
+    } else {
+      // For copy operation: Create new tab (existing logic)
+      try {
+        const createdTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        
+        // Copy the tab data if it exists in the clipboard
+        if (tabData && tabData.mergedData) {
+          await workspaceStateService.updateTabData(createdTab.id, tab.tabType || tab.type, tabData.mergedData);
                 }
                 
-                if (tabData.seismicResults) {
-                  setSeismicResults(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.seismicResults }
-                  }));
-                }
-                
-                if (tabData.snowLoadData) {
-                  setSnowLoadTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.snowLoadData }
-                  }));
-                }
-                
-                if (tabData.windLoadData) {
-                  setWindLoadTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.windLoadData }
-                  }));
-                }
-              }
+        // Update local state with the new tab
+        const updatedProjects = projects.map(p => {
+          if (p.id === targetProjectId) {
+            return {
+              ...p,
+              pages: p.pages.map(pg => {
+                if (pg.id === targetPageId) {
+                  const newTab = {
+                    ...createdTab,
+                    name: newTabName,
+                    active: false,
+                    isActive: false,  // Override backend's default isActive: true
+                    mergedData: tabData?.mergedData  // Preserve the merged data if available
+                  };
               
               return {
                 ...pg,
@@ -740,6 +1146,12 @@ export default function HomePage() {
     });
     
     setProjects(updatedProjects);
+        console.log('✅ Tab copied successfully:', newTabName);
+      } catch (error) {
+        console.error('❌ Failed to copy tab:', error);
+        showToastNotification('Failed to copy tab: ' + error.message, 'error');
+      }
+    }
     
     // Clear clipboard after paste
     if (clipboard.type === 'cut') {
@@ -750,29 +1162,51 @@ export default function HomePage() {
     setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
   }, [clipboard, projects]);
 
-  const pasteTabAfterSpecificTab = useCallback((targetProjectId, targetPageId, targetTabId) => {
-    if (!clipboard.data || clipboard.type === null) return;
-    
-    const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
-    
-    // For cut operations, we don't need to check for same tab since the original was removed
-    // For copy operations, we don't want to paste to the same location
-    if (clipboard.type === 'copy' && sourceProjectId === targetProjectId && sourcePageId === targetPageId && sourceTabId === tab.id) {
+  const pasteTabAfterSpecificTab = useCallback(async (targetProjectId, targetPageId, targetTabId) => {
+    console.log('🔄 Attempting to paste tab after specific tab:', { 
+      hasClipboard: !!clipboard.data, 
+      clipboardType: clipboard.type,
+      targetTabId 
+    });
+    if (!clipboard.data || clipboard.type === null) {
+      console.log('❌ No clipboard data available');
       return;
     }
     
-    const updatedProjects = projects.map(p => {
-      if (p.id === targetProjectId) {
-        return {
-          ...p,
-          pages: p.pages.map(pg => {
-            if (pg.id === targetPageId) {
+    const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
+    console.log('📋 Clipboard data:', { 
+      tabName: tab?.name, 
+      tabType: tab?.type || tab?.tabType,
+      hasTabData: !!tabData,
+      hasMergedData: !!tabData?.mergedData,
+      sourceLocation: `${sourceProjectId}/${sourcePageId}/${sourceTabId}`
+    });
+    
+    // For cut operations, we don't need to check for same tab since the original was removed
+    // For copy operations, we now allow pasting to the same page (but not to the exact same tab)
+    // This check is removed to allow same-page copying
+    
               // Check for duplicate names
-              const existingTabNames = pg.tabs.map(t => t.name);
+    const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
+    console.log('🎯 Target page lookup:', { 
+      targetProjectId, 
+      targetPageId, 
+      foundPage: !!targetPage,
+      pageTabsCount: targetPage?.tabs?.length || 0 
+    });
+    if (!targetPage) {
+      console.log('❌ Target page not found');
+      return;
+    }
+    
+    const existingTabNames = targetPage.tabs.map(t => t.name);
               let newTabName = tab.name;
               
-              if (existingTabNames.includes(newTabName)) {
-                // Find a unique name
+              // For copy operations, add "Copy" suffix to make it clear it's a copy
+              if (clipboard.type === 'copy') {
+                newTabName = createCopy(tab.name, existingTabNames);
+              } else if (existingTabNames.includes(newTabName)) {
+                // For cut operations, only modify name if there's a conflict
                 let counter = 1;
                 while (existingTabNames.includes(`${newTabName} ${counter}`)) {
                   counter++;
@@ -780,49 +1214,105 @@ export default function HomePage() {
                 newTabName = `${newTabName} ${counter}`;
               }
               
-              const newTabId = Date.now();
+    // For cut operations, if we're pasting to the same page, we can use the original name
+    const isSamePage = sourceProjectId === targetProjectId && sourcePageId === targetPageId;
+    const isCutOperation = clipboard.type === 'cut';
+    
+    console.log('🔄 Operation details:', { 
+      isSamePage, 
+      isCutOperation, 
+      finalTabName: newTabName 
+    });
+    
+    if (isCutOperation) {
+      // For cut operation: Delete original first, then create new with preserved data
+      try {
+        console.log('🔄 Starting cut/paste after tab operation for tab:', tab.id, 'name:', tab.name);
+        
+        // Step 1: Delete the original tab from backend to avoid name conflicts
+        await workspaceStateService.deleteTab(tab.id);
+        console.log('✅ Original tab deleted from backend:', tab.id);
+        
+        // Step 2: Wait a moment to ensure deletion is processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Step 3: Create new tab in target location
+        console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
+        const movedTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        console.log('✅ New tab created in target location:', movedTab.id);
+        
+        // Step 4: Restore the original data to the new tab
+        if (tabData && tabData.mergedData) {
+          await workspaceStateService.updateTabData(movedTab.id, tab.tabType || tab.type, tabData.mergedData);
+          console.log('✅ Original data restored to new tab');
+        }
+        
+        // Update local state with moved tab in correct position
+        const updatedProjects = projects.map(p => {
+          if (p.id === targetProjectId) {
+            return {
+              ...p,
+              pages: p.pages.map(pg => {
+                if (pg.id === targetPageId) {
               const newTab = {
-                ...tab,
-                id: newTabId,
+                    ...movedTab,
                 name: newTabName,
-                active: false // New tab should not be active
+                    active: false,
+                    isActive: false,
+                    mergedData: tabData?.mergedData
               };
               
-              // Restore tab-specific data if it exists
-              if (tabData) {
-                const newTabKey = `${targetProjectId}_${targetPageId}_${newTabId}`;
-                
-                if (tabData.seismicData) {
-                  setSeismicTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.seismicData }
-                  }));
+                  // Find the target tab index and insert after it
+                  const targetTabIndex = pg.tabs.findIndex(t => t.id === targetTabId);
+                  const newTabs = [...pg.tabs];
+                  newTabs.splice(targetTabIndex + 1, 0, newTab);
+                  
+                  return {
+                    ...pg,
+                    tabs: newTabs
+                  };
+                }
+                return pg;
+              })
+            };
+          }
+          return p;
+        });
+        
+        setProjects(updatedProjects);
+        console.log('✅ Tab moved successfully (cut/paste after tab):', newTabName);
+      } catch (error) {
+        console.error('❌ Failed to move tab:', error);
+        showToastNotification('Failed to move tab: ' + error.message, 'error');
+                }
+    } else {
+      // For copy operation: Create new tab (existing logic)
+      try {
+        const createdTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        
+        // Copy the tab data if it exists in the clipboard
+        if (tabData && tabData.mergedData) {
+          await workspaceStateService.updateTabData(createdTab.id, tab.tabType || tab.type, tabData.mergedData);
                 }
                 
-                if (tabData.seismicResults) {
-                  setSeismicResults(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.seismicResults }
-                  }));
-                }
-                
-                if (tabData.snowLoadData) {
-                  setSnowLoadTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.snowLoadData }
-                  }));
-                }
-                
-                if (tabData.windLoadData) {
-                  setWindLoadTabData(prev => ({
-                    ...prev,
-                    [newTabKey]: { ...tabData.windLoadData }
-                  }));
-                }
-              }
+      // Update local state with the new tab
+      const updatedProjects = projects.map(p => {
+        if (p.id === targetProjectId) {
+          return {
+            ...p,
+            pages: p.pages.map(pg => {
+              if (pg.id === targetPageId) {
+                const newTab = {
+                  ...createdTab,
+                  name: newTabName,
+                  active: false,
+                  isActive: false,  // Override backend's default isActive: true
+                  mergedData: tabData?.mergedData  // Preserve the merged data if available
+                };
               
               // Find the target tab index and insert after it
               const targetTabIndex = pg.tabs.findIndex(t => t.id === targetTabId);
+              console.log('📍 Inserting tab at position:', { targetTabIndex: targetTabIndex + 1, totalTabs: pg.tabs.length });
               const newTabs = [...pg.tabs];
               newTabs.splice(targetTabIndex + 1, 0, newTab);
               
@@ -839,6 +1329,14 @@ export default function HomePage() {
     });
     
     setProjects(updatedProjects);
+      console.log('✅ Tab pasted after specific tab successfully:', newTabName);
+    } catch (error) {
+      console.error('❌ Failed to paste tab after specific tab:', error);
+      showToastNotification('Failed to paste tab: ' + error.message, 'error');
+    }
+    } // Close the else block for copy operation
+    
+    console.log('🎯 Paste operation completed, cleaning up...');
     
     // Clear clipboard after paste
     if (clipboard.type === 'cut') {
@@ -965,6 +1463,67 @@ export default function HomePage() {
     }
   }, [isAuthenticated, userId]);
 
+  // TODO: Active tab persistence - temporarily disabled to prevent data loss
+  // Will implement a different approach that doesn't interfere with mergedData
+
+  // Fetch sediment types when seismic tab with results is loaded
+  useEffect(() => {
+    const hasSeismicResults = projects.some(project => 
+      project.pages?.some(page => 
+        page.tabs?.some(tab => 
+          (tab.type === 'seismic' || tab.tabType === 'seismic') && tab.mergedData?.seismicResults?.rgb
+        )
+      )
+    );
+
+    if (hasSeismicResults && sedimentTypes.length === 0) {
+      console.log('🌱 Fetching sediment types for seismic results...');
+      fetchSedimentTypes();
+    }
+  }, [projects, sedimentTypes]);
+
+  // Calculate probabilities for sediment types when seismic results are available from persisted data
+  useEffect(() => {
+    console.log('🔍 Sediment probability useEffect triggered');
+    console.log('Projects:', projects.length);
+    console.log('SedimentTypes:', sedimentTypes.length);
+    
+    // Find seismic tabs with results
+    projects.forEach((project, projectIndex) => {
+      if (project.pages) {
+        project.pages.forEach((page, pageIndex) => {
+          if (page.tabs) {
+            page.tabs.forEach((tab, tabIndex) => {
+              console.log(`Tab ${projectIndex}-${pageIndex}-${tabIndex}:`, tab.type || tab.tabType, 'merged:', !!tab.mergedData);
+              if ((tab.type === 'seismic' || tab.tabType === 'seismic') && tab.mergedData?.seismicResults?.rgb) {
+                console.log('🎯 Found seismic tab with results!', tab.mergedData.seismicResults);
+                const seismicResult = tab.mergedData.seismicResults;
+                if (sedimentTypes.length > 0) {
+                  // Check if probabilities are already calculated
+                  const hasProbs = sedimentTypes.some(row => row.probability !== undefined);
+                  console.log('Has probabilities already?', hasProbs);
+                  if (!hasProbs) {
+                    console.log('🧮 Calculating probabilities...');
+                    const rgb = seismicResult.rgb;
+                    const probs = sedimentTypes.map(row => {
+                      const soil_rgb = [row.color_r, row.color_g, row.color_b];
+                      const dot = rgb[0]*soil_rgb[0] + rgb[1]*soil_rgb[1] + rgb[2]*soil_rgb[2];
+                      const norm1 = Math.sqrt(rgb[0]**2 + rgb[1]**2 + rgb[2]**2);
+                      const norm2 = Math.sqrt(soil_rgb[0]**2 + soil_rgb[1]**2 + soil_rgb[2]**2);
+                      return norm1 && norm2 ? dot/(norm1*norm2) : 0;
+                    });
+                    setSedimentTypes(sedimentTypes.map((row, i) => ({ ...row, probability: probs[i] })));
+                    console.log('✅ Probabilities calculated and set!');
+                  }
+                }
+              }
+            });
+          }
+        });
+      }
+    });
+  }, [projects, sedimentTypes]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -997,6 +1556,15 @@ export default function HomePage() {
             console.error('Failed to fetch user profile after login:', error);
             // Fallback to username from login response
             setUsername(data.username || username);
+          }
+          
+          // Initialize workspace after successful login
+          try {
+            await initializeWorkspace();
+            console.log('✅ Workspace initialized after login');
+          } catch (error) {
+            console.error('❌ Failed to initialize workspace after login:', error);
+            showToastNotification('Failed to load workspace: ' + error.message, 'error');
           }
           
           setShowForm(false);
@@ -1178,10 +1746,37 @@ export default function HomePage() {
             });
             if (!res.ok) throw new Error('Failed to fetch seismic info');
             const seismicResult = await res.json();
+            console.log('🎯 Seismic API response received (decrypt path):', seismicResult);
             setSeismicResults(prev => ({
               ...prev,
               [tabKey]: seismicResult
             }));
+            
+            // Save seismic results to database for persistence (decrypt path)
+            try {
+              // Extract tab ID from tabKey (format: projectId_pageId_tabId)
+              const tabId = tabKey.split('_')[2];
+              
+              const seismicResultsDelta = {
+                seismicResults: {
+                  site_class: seismicResult.site_class,
+                  coordinates: seismicResult.coordinates,
+                  address_checked: seismicResult.address_checked,
+                  rgb: seismicResult.rgb,
+                  most_similar_soil: seismicResult.most_similar_soil,
+                  soil_pressure: seismicResult.soil_pressure,
+                  sa_site: seismicResult.sa_site,
+                  sa_x450: seismicResult.sa_x450
+                }
+              };
+              console.log('🔍 Saving seismic results to database (decrypt path):', seismicResultsDelta);
+              console.log('🔍 Using tab ID:', tabId);
+              await workspaceStateService.saveTabDataImmediately(tabId, 'seismic', seismicResultsDelta);
+              console.log('✅ Seismic results saved successfully (decrypt path)');
+            } catch (error) {
+              console.error('❌ Error saving seismic results (decrypt path):', error);
+              // Don't show error to user as this is background save - the UI is already working
+            }
             
             // Update sediment types with probabilities
             if (seismicResult.most_similar_soil && seismicResult.rgb && currentSedimentTypes.length > 0) {
@@ -1258,52 +1853,49 @@ export default function HomePage() {
   };
 
   // Project management functions
-  const addProject = () => {
+  const addProject = async () => {
+    try {
     const existingNames = getExistingNames('project');
     const baseName = 'Project';
     const newName = generateUniqueName(baseName, existingNames);
     
-    const newProject = {
-      id: Date.now(),
-      name: newName,
-      pages: [],
-      expanded: false
-    };
-    setProjects([...projects, newProject]);
+      await workspaceStateService.createProject(newName);
+    } catch (error) {
+      console.error('Error creating project:', error);
+      showToastNotification('Failed to create project: ' + error.message, 'error');
+    }
   };
 
-  const addPage = (projectId) => {
+  const addPage = async (projectId) => {
+    try {
     const existingNames = getExistingNames('page', projectId);
     const baseName = 'Page';
     const newName = generateUniqueName(baseName, existingNames);
     
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        const newPageId = Date.now();
-        return {
-          ...project,
-          pages: [...project.pages, { 
-            id: newPageId, 
-            name: newName,
-            tabs: [
-              { id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }
-            ]
-          }]
-        };
-      }
-      return project;
-    });
-    setProjects(updatedProjects);
+      const newPage = await workspaceStateService.createPage(projectId, newName);
+      
+      // Create a default Welcome tab for the new page
+      await workspaceStateService.createTab(newPage.id, 'Welcome', 'Welcome');
+    } catch (error) {
+      console.error('Error creating page:', error);
+      showToastNotification('Failed to create page: ' + error.message, 'error');
+    }
   };
 
-  const toggleProjectExpansion = (projectId) => {
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        return { ...project, expanded: !project.expanded };
+  const toggleProjectExpansion = async (projectId) => {
+    try {
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        // Use isExpanded for both backend and frontend consistency
+        const currentExpanded = project.isExpanded || project.expanded || false;
+        await workspaceStateService.updateProject(projectId, { 
+          isExpanded: !currentExpanded 
+        });
       }
-      return project;
-    });
-    setProjects(updatedProjects);
+    } catch (error) {
+      console.error('Error updating project:', error);
+      showToastNotification('Failed to update project: ' + error.message, 'error');
+    }
   };
 
   const handleProjectContextMenu = (e, projectId) => {
@@ -1318,7 +1910,7 @@ export default function HomePage() {
     setContextMenu({ show: true, x: e.clientX, y: e.clientY, type: 'page', itemId: { projectId, pageId } });
   };
 
-  const handleContextMenuAction = (action) => {
+  const handleContextMenuAction = async (action) => {
     const { type, itemId } = contextMenu;
     
     if (type === 'project') {
@@ -1330,19 +1922,82 @@ export default function HomePage() {
           setEditingItem({ type: 'project', id: projectId, name: project.name });
           break;
         case 'copy':
+          try {
           const existingProjectNames = getExistingNames('project');
           const newProjectName = createCopy(project.name, existingProjectNames);
-          const copiedProject = {
-            ...project,
-            id: Date.now(),
-            name: newProjectName,
-            pages: project.pages.map(page => ({ ...page, id: Date.now() + Math.random() })),
-            expanded: false
-          };
-          setProjects([...projects, copiedProject]);
+            
+            // Create project in backend first
+            const newProject = await workspaceStateService.createProject(newProjectName);
+            const newProjectId = newProject.id; // Use the real ID from the returned project object
+            console.log('✅ Project copied to backend:', newProjectId);
+            
+            // Copy all pages from original project
+            for (const originalPage of project.pages) {
+              const pageNames = getExistingNames('page', newProjectId);
+              const newPageName = generateUniqueName(originalPage.name, pageNames);
+              const newPage = await workspaceStateService.createPage(newProjectId, newPageName);
+              const newPageId = newPage.id; // Use the real ID from the returned page object
+              console.log('✅ Page copied to backend:', newPageId);
+              
+              // Copy all tabs from original page with their data
+              if (originalPage.tabs && originalPage.tabs.length > 0) {
+                for (const originalTab of originalPage.tabs) {
+                  const tabNames = getExistingNames('tab', newProjectId, newPageId);
+                  const newTabName = generateUniqueName(originalTab.name, tabNames);
+                  
+                  // Create the tab
+                  const createdTab = await workspaceStateService.createTab(newPageId, newTabName, originalTab.type || originalTab.tabType || 'design_tables');
+                  console.log('✅ Tab created:', newTabName);
+                  
+                  // Copy the tab data if it exists
+                  const originalTabKey = `${projectId}_${originalPage.id}_${originalTab.id}`;
+                  const tabData = {
+                    seismicData: seismicTabData[originalTabKey] || null,
+                    seismicResults: seismicResults[originalTabKey] || null,
+                    snowLoadData: snowLoadTabData[originalTabKey] || null,
+                    windLoadData: windLoadTabData[originalTabKey] || null,
+                    mergedData: originalTab.mergedData || null
+                  };
+                  
+                  // Apply the data to the new tab if any exists
+                  if (tabData.mergedData || tabData.seismicData || tabData.snowLoadData || tabData.windLoadData) {
+                    try {
+                      await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
+                      console.log('✅ Tab data copied:', newTabName);
+                    } catch (error) {
+                      console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
+                    }
+                  }
+                }
+              }
+            }
+            
+            showToastNotification(`Project "${newProjectName}" copied successfully`, 'success');
+          } catch (error) {
+            console.error('❌ Failed to copy project:', error);
+            showToastNotification('Failed to copy project: ' + error.message, 'error');
+          }
           break;
         case 'delete':
+          try {
+            // Update frontend immediately for better UX
           setProjects(projects.filter(p => p.id !== projectId));
+            
+            // Then delete from backend
+            await workspaceStateService.deleteProject(projectId);
+            console.log('✅ Project deleted from backend:', projectId);
+            showToastNotification(`Project "${project.name}" deleted successfully`, 'success');
+          } catch (error) {
+            console.error('❌ Failed to delete project:', error);
+            // Restore the project in frontend if backend delete failed
+            setProjects(prevProjects => {
+              if (!prevProjects.find(p => p.id === projectId)) {
+                return [...prevProjects, project];
+              }
+              return prevProjects;
+            });
+            showToastNotification('Failed to delete project: ' + error.message, 'error');
+          }
           break;
         case 'newPage':
           addPage(projectId);
@@ -1358,20 +2013,56 @@ export default function HomePage() {
           setEditingItem({ type: 'page', id: { projectId, pageId }, name: page.name });
           break;
         case 'copy':
+          try {
           const existingPageNames = getExistingNames('page', projectId);
           const newPageName = createCopy(page.name, existingPageNames);
-          const updatedProjects = projects.map(p => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                pages: [...p.pages, { ...page, id: Date.now(), name: newPageName }]
-              };
+            
+            // Create page in backend first
+            const newPage = await workspaceStateService.createPage(projectId, newPageName);
+            const newPageId = newPage.id; // Use the real ID from the returned page object
+            console.log('✅ Page copied to backend:', newPageId);
+            
+            // Copy all tabs from original page with their data
+            if (page.tabs && page.tabs.length > 0) {
+              for (const originalTab of page.tabs) {
+                const tabNames = getExistingNames('tab', projectId, newPageId);
+                const newTabName = generateUniqueName(originalTab.name, tabNames);
+                
+                // Create the tab
+                const createdTab = await workspaceStateService.createTab(newPageId, newTabName, originalTab.type || originalTab.tabType || 'design_tables');
+                console.log('✅ Tab created:', newTabName);
+                
+                // Copy the tab data if it exists
+                const originalTabKey = `${projectId}_${pageId}_${originalTab.id}`;
+                const tabData = {
+                  seismicData: seismicTabData[originalTabKey] || null,
+                  seismicResults: seismicResults[originalTabKey] || null,
+                  snowLoadData: snowLoadTabData[originalTabKey] || null,
+                  windLoadData: windLoadTabData[originalTabKey] || null,
+                  mergedData: originalTab.mergedData || null
+                };
+                
+                // Apply the data to the new tab if any exists
+                if (tabData.mergedData || tabData.seismicData || tabData.snowLoadData || tabData.windLoadData) {
+                  try {
+                    await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
+                    console.log('✅ Tab data copied:', newTabName);
+                  } catch (error) {
+                    console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
+                  }
+                }
+              }
             }
-            return p;
-          });
-          setProjects(updatedProjects);
+            
+            showToastNotification(`Page "${newPageName}" copied successfully`, 'success');
+          } catch (error) {
+            console.error('❌ Failed to copy page:', error);
+            showToastNotification('Failed to copy page: ' + error.message, 'error');
+          }
           break;
         case 'delete':
+          try {
+            // Update frontend immediately for better UX
           const projectsAfterDelete = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1382,9 +2073,31 @@ export default function HomePage() {
             return p;
           });
           setProjects(projectsAfterDelete);
+            
+            // Then delete from backend
+            await workspaceStateService.deletePage(pageId);
+            console.log('✅ Page deleted from backend:', pageId);
+            showToastNotification(`Page "${page.name}" deleted successfully`, 'success');
+          } catch (error) {
+            console.error('❌ Failed to delete page:', error);
+            // Restore the page in frontend if backend delete failed
+            setProjects(prevProjects => prevProjects.map(p => {
+              if (p.id === projectId) {
+                const hasPage = p.pages.find(pg => pg.id === pageId);
+                if (!hasPage) {
+                  return {
+                    ...p,
+                    pages: [...p.pages, page]
+                  };
+                }
+              }
+              return p;
+            }));
+            showToastNotification('Failed to delete page: ' + error.message, 'error');
+          }
           break;
         case 'paste':
-          pasteTabFromClipboard(projectId, pageId);
+          await pasteTabFromClipboard(projectId, pageId);
           break;
       }
     } else if (type === 'tab') {
@@ -1401,54 +2114,17 @@ export default function HomePage() {
         case 'copy':
           const existingTabNames = getExistingNames('tab', projectId, pageId);
           const newTabName = createCopy(tab.name, existingTabNames);
-          const newTabId = Date.now();
           
-          // Copy tab-specific data based on tab type
-          const originalTabKey = `${projectId}_${pageId}_${tabId}`;
-          const newTabKey = `${projectId}_${pageId}_${newTabId}`;
-          
-          // Copy seismic data if it's a seismic tab
-          if (tab.type === 'Seismic Template') {
-            const originalSeismicData = seismicTabData[originalTabKey];
-            const originalSeismicResult = seismicResults[originalTabKey];
+          // Create the copied tab in the backend first
+          try {
+            const createdTab = await workspaceStateService.createTab(pageId, newTabName, tab.tabType || tab.type);
             
-            if (originalSeismicData) {
-              setSeismicTabData(prev => ({
-                ...prev,
-                [newTabKey]: { ...originalSeismicData }
-              }));
-            }
-            
-            if (originalSeismicResult) {
-              setSeismicResults(prev => ({
-                ...prev,
-                [newTabKey]: { ...originalSeismicResult }
-              }));
-            }
+            // Copy the tab data if it exists (using new backend-only approach)
+            if (tab.mergedData) {
+              await workspaceStateService.updateTabData(createdTab.id, tab.tabType || tab.type, tab.mergedData);
           }
           
-          // Copy snow load data if it's a snow load tab
-          if (tab.type === 'Snow Load') {
-            const originalSnowData = snowLoadTabData[originalTabKey];
-            if (originalSnowData) {
-              setSnowLoadTabData(prev => ({
-                ...prev,
-                [newTabKey]: { ...originalSnowData }
-              }));
-            }
-          }
-          
-          // Copy wind load data if it's a wind load tab
-          if (tab.type === 'Wind Load') {
-            const originalWindData = windLoadTabData[originalTabKey];
-            if (originalWindData) {
-              setWindLoadTabData(prev => ({
-                ...prev,
-                [newTabKey]: { ...originalWindData }
-              }));
-            }
-          }
-          
+            // Update local state with the real tab from backend
           const updatedProjects = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1456,10 +2132,11 @@ export default function HomePage() {
                 pages: p.pages.map(pa => {
                   if (pa.id === pageId) {
                     const copiedTab = {
-                      ...tab,
-                      id: newTabId,
+                        ...createdTab,
                       name: newTabName,
-                      active: false
+                        active: false,
+                        isActive: false,  // Override backend's default isActive: true
+                        mergedData: tab.mergedData  // Preserve the merged data
                     };
                     return {
                       ...pa,
@@ -1473,17 +2150,22 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjects);
+            console.log('✅ Tab copied successfully:', newTabName);
+          } catch (error) {
+            console.error('❌ Failed to copy tab:', error);
+            showToastNotification('Failed to copy tab: ' + error.message, 'error');
+          }
           break;
         case 'newTabRight':
           // Create new tab to the right of current tab
           const existingTabNamesRight = getExistingNames('tab', projectId, pageId);
           const newTabNameRight = generateUniqueName('Design Tables', existingTabNamesRight);
-          const newTabRight = {
-            id: Date.now(),
-            name: newTabNameRight,
-            type: 'Design Tables',
-            active: false
-          };
+          
+          try {
+            // Create tab in backend first
+            const createdTab = await workspaceStateService.createTab(pageId, newTabNameRight, 'design_tables');
+            
+            // Update local state with proper insertion
           const updatedProjectsRight = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1492,6 +2174,12 @@ export default function HomePage() {
                   if (pa.id === pageId) {
                     const tabIndex = pa.tabs.findIndex(t => t.id === tabId);
                     const newTabs = [...pa.tabs];
+                      const newTabRight = {
+                        ...createdTab,
+                        name: newTabNameRight,
+                        active: false,
+                        isActive: false
+                      };
                     newTabs.splice(tabIndex + 1, 0, newTabRight);
                     return {
                       ...pa,
@@ -1505,9 +2193,21 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsRight);
+            
+            // Update display order in backend
+            const updatedPage = updatedProjectsRight.find(p => p.id === projectId).pages.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            
+            console.log('✅ New tab created to the right:', newTabNameRight);
+          } catch (error) {
+            console.error('❌ Failed to create new tab to the right:', error);
+            showToastNotification('Failed to create new tab: ' + error.message, 'error');
+          }
           break;
         case 'lockTab':
           // Lock the tab
+          try {
+            await workspaceStateService.updateTab(tabId, { isLocked: true });
           const updatedProjectsLock = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1518,7 +2218,7 @@ export default function HomePage() {
                       ...pa,
                       tabs: pa.tabs.map(t => {
                         if (t.id === tabId) {
-                          return { ...t, locked: true };
+                            return { ...t, locked: true, isLocked: true };
                         }
                         return t;
                       })
@@ -1531,9 +2231,16 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsLock);
+            console.log('✅ Tab locked successfully');
+          } catch (error) {
+            console.error('❌ Failed to lock tab:', error);
+            showToastNotification('Failed to lock tab: ' + error.message, 'error');
+          }
           break;
         case 'unlockTab':
           // Unlock the tab
+          try {
+            await workspaceStateService.updateTab(tabId, { isLocked: false });
           const updatedProjectsUnlock = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1544,7 +2251,7 @@ export default function HomePage() {
                       ...pa,
                       tabs: pa.tabs.map(t => {
                         if (t.id === tabId) {
-                          return { ...t, locked: false };
+                            return { ...t, locked: false, isLocked: false };
                         }
                         return t;
                       })
@@ -1557,18 +2264,24 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsUnlock);
+            console.log('✅ Tab unlocked successfully');
+          } catch (error) {
+            console.error('❌ Failed to unlock tab:', error);
+            showToastNotification('Failed to unlock tab: ' + error.message, 'error');
+          }
           break;
         case 'copyToClipboard':
-          copyTabToClipboard(tabId, false);
+          await copyTabToClipboard(tabId, false);
           break;
         case 'cutToClipboard':
-          copyTabToClipboard(tabId, true);
+          await copyTabToClipboard(tabId, true);
           break;
         case 'pasteAfterThisTab':
-          pasteTabAfterSpecificTab(selectedPage.projectId, selectedPage.pageId, tabId);
+          await pasteTabAfterSpecificTab(selectedPage.projectId, selectedPage.pageId, tabId);
           break;
         case 'moveToStart':
           // Move tab to the beginning
+          try {
           const updatedProjectsStart = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1593,9 +2306,19 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsStart);
+            
+            // Update display order in backend
+            const updatedPage = updatedProjectsStart.find(p => p.id === projectId).pages.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            console.log('✅ Tab moved to start successfully');
+          } catch (error) {
+            console.error('❌ Failed to move tab to start:', error);
+            showToastNotification('Failed to move tab: ' + error.message, 'error');
+          }
           break;
         case 'moveToEnd':
           // Move tab to the end
+          try {
           const updatedProjectsEnd = projects.map(p => {
             if (p.id === projectId) {
               return {
@@ -1620,21 +2343,65 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsEnd);
+            
+            // Update display order in backend
+            const updatedPage = updatedProjectsEnd.find(p => p.id === projectId).pages.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            console.log('✅ Tab moved to end successfully');
+          } catch (error) {
+            console.error('❌ Failed to move tab to end:', error);
+            showToastNotification('Failed to move tab: ' + error.message, 'error');
+          }
           break;
         case 'closeOthers':
           // Close all other tabs except the current one and locked tabs
+          try {
+            const currentPage = project.pages.find(p => p.id === pageId);
+            const tabsToDelete = currentPage.tabs.filter(t => t.id !== tabId && !t.locked && !t.isLocked);
+            
+            // Delete tabs from backend
+            for (const tabToDelete of tabsToDelete) {
+              await workspaceStateService.deleteTab(tabToDelete.id);
+            }
+            
           const updatedProjectsCloseOthers = projects.map(p => {
             if (p.id === projectId) {
               return {
                 ...p,
                 pages: p.pages.map(pa => {
                   if (pa.id === pageId) {
-                    const remainingTabs = pa.tabs.filter(t => t.id === tabId || t.locked);
+                      const remainingTabs = pa.tabs.filter(t => t.id === tabId || t.locked || t.isLocked);
                     // If no tabs remain, create a welcome tab
                     if (remainingTabs.length === 0) {
+                        // Create welcome tab in backend first
+                        const createWelcomeTab = async () => {
+                          try {
+                            const welcomeTab = await workspaceStateService.createTab(pageId, 'Welcome', 'welcome');
+                            setProjects(prevProjects => prevProjects.map(pr => {
+                              if (pr.id === projectId) {
+                                return {
+                                  ...pr,
+                                  pages: pr.pages.map(pg => {
+                                    if (pg.id === pageId) {
+                                      return {
+                                        ...pg,
+                                        tabs: [{ ...welcomeTab, active: true, isActive: true }]
+                                      };
+                                    }
+                                    return pg;
+                                  })
+                                };
+                              }
+                              return pr;
+                            }));
+                          } catch (error) {
+                            console.error('❌ Failed to create welcome tab:', error);
+                          }
+                        };
+                        createWelcomeTab();
                       return {
                         ...pa,
-                        tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
+                          tabs: [] // Temporarily empty until welcome tab is created
                       };
                     }
                     return {
@@ -1649,21 +2416,61 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsCloseOthers);
+            console.log('✅ Closed other tabs successfully');
+          } catch (error) {
+            console.error('❌ Failed to close other tabs:', error);
+            showToastNotification('Failed to close other tabs: ' + error.message, 'error');
+          }
           break;
         case 'closeAll':
           // Close all tabs except locked ones, create welcome tab if none left
+          try {
+            const currentPage = project.pages.find(p => p.id === pageId);
+            const tabsToDelete = currentPage.tabs.filter(t => !t.locked && !t.isLocked);
+            
+            // Delete tabs from backend
+            for (const tabToDelete of tabsToDelete) {
+              await workspaceStateService.deleteTab(tabToDelete.id);
+            }
+            
           const updatedProjectsCloseAll = projects.map(p => {
             if (p.id === projectId) {
               return {
                 ...p,
                 pages: p.pages.map(pa => {
                   if (pa.id === pageId) {
-                    const lockedTabs = pa.tabs.filter(t => t.locked);
+                      const lockedTabs = pa.tabs.filter(t => t.locked || t.isLocked);
                     // If no locked tabs remain, create a welcome tab
                     if (lockedTabs.length === 0) {
+                        // Create welcome tab in backend first
+                        const createWelcomeTab = async () => {
+                          try {
+                            const welcomeTab = await workspaceStateService.createTab(pageId, 'Welcome', 'welcome');
+                            setProjects(prevProjects => prevProjects.map(pr => {
+                              if (pr.id === projectId) {
+                                return {
+                                  ...pr,
+                                  pages: pr.pages.map(pg => {
+                                    if (pg.id === pageId) {
+                                      return {
+                                        ...pg,
+                                        tabs: [{ ...welcomeTab, active: true, isActive: true }]
+                                      };
+                                    }
+                                    return pg;
+                                  })
+                                };
+                              }
+                              return pr;
+                            }));
+                          } catch (error) {
+                            console.error('❌ Failed to create welcome tab:', error);
+                          }
+                        };
+                        createWelcomeTab();
                       return {
                         ...pa,
-                        tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
+                          tabs: [] // Temporarily empty until welcome tab is created
                       };
                     }
                     return {
@@ -1678,6 +2485,11 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsCloseAll);
+            console.log('✅ Closed all tabs successfully');
+          } catch (error) {
+            console.error('❌ Failed to close all tabs:', error);
+            showToastNotification('Failed to close all tabs: ' + error.message, 'error');
+          }
           break;
       }
     }
@@ -1685,59 +2497,25 @@ export default function HomePage() {
     setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
   };
 
-  const handleEditSave = (newName) => {
+  const handleEditSave = async (newName) => {
+    try {
     if (editingItem.type === 'project') {
-      const updatedProjects = projects.map(project => {
-        if (project.id === editingItem.id) {
-          return { ...project, name: newName };
-        }
-        return project;
-      });
-      setProjects(updatedProjects);
+        // Update project name in database
+        await workspaceStateService.updateProject(editingItem.id, { name: newName });
     } else if (editingItem.type === 'page') {
-      const { projectId, pageId } = editingItem.id;
-      const updatedProjects = projects.map(project => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            pages: project.pages.map(page => {
-              if (page.id === pageId) {
-                return { ...page, name: newName };
-              }
-              return page;
-            })
-          };
-        }
-        return project;
-      });
-      setProjects(updatedProjects);
+        const { pageId } = editingItem.id;
+        // Update page name in database
+        await workspaceStateService.updatePage(pageId, { name: newName });
     } else if (editingItem.type === 'tab') {
-      const { projectId, pageId, tabId } = editingItem.id;
-      const updatedProjects = projects.map(project => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            pages: project.pages.map(page => {
-              if (page.id === pageId) {
-                return {
-                  ...page,
-                  tabs: page.tabs.map(tab => {
-                    if (tab.id === tabId) {
-                      return { ...tab, name: newName };
+        const { tabId } = editingItem.id;
+        // Update tab name in database
+        await workspaceStateService.updateTab(tabId, { name: newName });
                     }
-                    return tab;
-                  })
-                };
-              }
-              return page;
-            })
-          };
-        }
-        return project;
-      });
-      setProjects(updatedProjects);
+      setEditingItem({ type: '', id: null, name: '' });
+    } catch (error) {
+      console.error('Error saving name change:', error);
+      showToastNotification('Failed to save name change: ' + error.message, 'error');
     }
-    setEditingItem({ type: '', id: null, name: '' });
   };
 
   const handleEditCancel = () => {
@@ -1745,66 +2523,90 @@ export default function HomePage() {
   };
 
   // Tab management functions
-  const addTab = () => {
+  const addTab = async () => {
+    try {
     const { projectId, pageId } = selectedPage;
+      if (!pageId) {
+        showToastNotification('Please select a page first', 'error');
+        return;
+      }
+      
     const existingNames = getExistingNames('tab', projectId, pageId);
     const baseName = 'Design Tables';
     const newName = generateUniqueName(baseName, existingNames);
     
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        return {
-          ...project,
-          pages: project.pages.map(page => {
-            if (page.id === pageId) {
-              const newTab = {
-                id: Date.now(),
-                name: newName,
-                type: 'Design Tables',
-                active: false
-              };
-              return {
-                ...page,
-                tabs: [...page.tabs, newTab]
-              };
-            }
-            return page;
-          })
-        };
-      }
-      return project;
-    });
-    setProjects(updatedProjects);
+      await workspaceStateService.createTab(pageId, newName, 'design_tables');
+    } catch (error) {
+      console.error('Error creating tab:', error);
+      showToastNotification('Failed to create tab: ' + error.message, 'error');
+    }
   };
 
-  const closeTab = (tabId) => {
+  const closeTab = async (tabId) => {
     const { projectId, pageId } = selectedPage;
+    
+    // Find the tab to check if it's locked
+    const project = projects.find(p => p.id === projectId);
+    const page = project?.pages?.find(p => p.id === pageId);
+    const tabToClose = page?.tabs?.find(tab => tab.id === tabId);
+    
+    if (tabToClose && tabToClose.locked) {
+      return; // Don't close locked tabs
+    }
+    
+    // Delete from backend first
+    try {
+      await workspaceStateService.deleteTab(tabId);
+      console.log('✅ Tab deleted from backend:', tabId);
+    } catch (error) {
+      console.error('❌ Failed to delete tab from backend:', error);
+      showToastNotification('Failed to delete tab: ' + error.message, 'error');
+      return; // Don't update frontend if backend deletion failed
+    }
+    
+    // Update frontend state
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         return {
           ...project,
           pages: project.pages.map(page => {
             if (page.id === pageId) {
-              // Check if the tab is locked
-              const tabToClose = page.tabs.find(tab => tab.id === tabId);
-              if (tabToClose && tabToClose.locked) {
-                return page; // Don't close locked tabs
-              }
-              
-              if (page.tabs.length > 1) {
                 const remainingTabs = page.tabs.filter(tab => tab.id !== tabId);
+              
                 // If no tabs left after closing, create a welcome tab
                 if (remainingTabs.length === 0) {
+                console.log('Creating Welcome tab - no tabs remaining');
                   return {
                     ...page,
-                    tabs: [{ id: Date.now(), name: 'Welcome', type: 'Welcome', active: true }]
-                  };
-                }
+                  tabs: [{ 
+                    id: Date.now(), 
+                    name: 'Welcome', 
+                    type: 'Welcome', 
+                    isActive: true,
+                    active: true 
+                  }]
+                };
+              }
+              
+              // If we have remaining tabs, make sure at least one is active
+              const hasActiveTab = remainingTabs.some(tab => tab.isActive || tab.active);
+              if (!hasActiveTab && remainingTabs.length > 0) {
+                // Prefer to activate a non-Welcome tab if available
+                const nonWelcomeTab = remainingTabs.find(tab => 
+                  tab.type !== 'Welcome' && tab.tabType !== 'Welcome' && 
+                  tab.type !== 'welcome' && tab.tabType !== 'welcome'
+                );
+                
+                const tabToActivate = nonWelcomeTab || remainingTabs[0];
+                tabToActivate.isActive = true;
+                tabToActivate.active = true;
+                console.log('Auto-activating tab after close:', tabToActivate.name);
+              }
+              
                 return {
                   ...page,
                   tabs: remainingTabs
                 };
-              }
             }
             return page;
           })
@@ -1815,8 +2617,10 @@ export default function HomePage() {
     setProjects(updatedProjects);
   };
 
-  const selectTab = (tabId) => {
+  const selectTab = async (tabId) => {
     const { projectId, pageId } = selectedPage;
+    
+    // Update local state immediately
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         return {
@@ -1827,7 +2631,8 @@ export default function HomePage() {
                 ...page,
                 tabs: page.tabs.map(tab => ({
                   ...tab,
-                  active: tab.id === tabId
+                  active: tab.id === tabId,
+                  isActive: tab.id === tabId  // Support both property names
                 }))
               };
             }
@@ -1838,6 +2643,15 @@ export default function HomePage() {
       return project;
     });
     setProjects(updatedProjects);
+    
+    // Persist active status using lightweight API (doesn't affect mergedData)
+    try {
+      await workspaceApiService.updateActiveTab(tabId);
+      console.log('✅ Tab selected and active status saved:', tabId);
+    } catch (error) {
+      console.error('❌ Failed to save active tab status:', error);
+      // Don't show error to user as this is background save
+    }
   };
 
   const selectPage = (projectId, pageId) => {
@@ -1850,65 +2664,158 @@ export default function HomePage() {
     setContextMenu({ show: true, x: e.clientX, y: e.clientY, type: 'tab', itemId: tabId });
   };
 
-  const handleTabTypeChange = (tabId, newType) => {
+  // Map display names to internal tab types
+  const mapDisplayNameToTabType = (displayName) => {
+    const mapping = {
+      'Design Tables': 'design_tables',
+      'Snow Load': 'snow_load', 
+      'Wind Load': 'wind_load',
+      'Seismic Template': 'seismic'
+    };
+    return mapping[displayName] || displayName;
+  };
+
+  // Map internal tab types to display names  
+  const mapTabTypeToDisplayName = (tabType) => {
+    const mapping = {
+      'Welcome': 'Welcome',
+      'welcome': 'Welcome',
+      'design_tables': 'Design Tables',
+      'snow_load': 'Snow Load',
+      'wind_load': 'Wind Load', 
+      'seismic': 'Seismic Template'
+    };
+    return mapping[tabType] || 'Design Tables';
+  };
+
+  // Helper function to find active tab with property name compatibility
+  const findActiveTab = (tabs) => {
+    return tabs?.find(t => t.isActive || t.active) || null;
+  };
+
+  // Helper function to find active tab or fallback to Welcome tab
+  const findActiveTabOrWelcome = (tabs) => {
+    const activeTab = findActiveTab(tabs);
+    if (activeTab) {
+      return activeTab;
+    }
+    
+    // If no active tab but tabs exist, find the first non-Welcome tab to activate
+    const nonWelcomeTabs = tabs?.filter(t => 
+      t.type !== 'Welcome' && t.tabType !== 'Welcome' && 
+      t.type !== 'welcome' && t.tabType !== 'welcome'
+    );
+    
+    if (nonWelcomeTabs && nonWelcomeTabs.length > 0) {
+      // Auto-activate the first non-Welcome tab
+      const tabToActivate = nonWelcomeTabs[0];
+      console.log('Auto-activating non-Welcome tab:', tabToActivate.name);
+      
+      // Set this tab as active
+      setTimeout(() => {
+        selectTab(tabToActivate.id);
+      }, 0);
+      
+      return tabToActivate;
+    }
+    
+    // If no non-Welcome tabs, try to find Welcome tab
+    const welcomeTab = tabs?.find(t => 
+      t.type === 'Welcome' || t.tabType === 'Welcome' || 
+      t.type === 'welcome' || t.tabType === 'welcome'
+    );
+    
+    if (welcomeTab) {
+      return welcomeTab;
+    }
+    
+    // If no tabs exist at all, we need to trigger creation of a Welcome tab
+    // This will be handled by the createWelcomeTabIfNeeded function
+    return null;
+  };
+
+  // Helper function to ensure Welcome tab exists when needed
+  const createWelcomeTabIfNeeded = async (pageId) => {
+    try {
+      const existingNames = getExistingNames('tab', selectedPage.projectId, pageId);
+      const welcomeName = generateUniqueName('Welcome', existingNames);
+      
+      console.log('Creating Welcome tab for page:', pageId);
+      await workspaceStateService.createTab(pageId, welcomeName, 'Welcome');
+      return true;
+    } catch (error) {
+      console.error('Error creating Welcome tab:', error);
+      return false;
+    }
+  };
+
+  const handleTabTypeChange = async (tabId, newType) => {
+    try {
     const { projectId, pageId } = selectedPage;
     
-    // Clear any existing data for this tab when type changes
-    const tabKey = `${projectId}_${pageId}_${tabId}`;
+      // Convert display name to internal type
+      const internalType = mapDisplayNameToTabType(newType);
     
-    // Clear seismic data
-    setSeismicTabData(prev => {
-      const newData = { ...prev };
-      delete newData[tabKey];
-      return newData;
-    });
-    
-    setSeismicResults(prev => {
-      const newResults = { ...prev };
-      delete newResults[tabKey];
-      return newResults;
-    });
-    
-    // Clear snow load data
-    setSnowLoadTabData(prev => {
-      const newData = { ...prev };
-      delete newData[tabKey];
-      return newData;
-    });
-    
-    // Clear wind load data
-    setWindLoadTabData(prev => {
-      const newData = { ...prev };
-      delete newData[tabKey];
-      return newData;
-    });
-    
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        return {
-          ...project,
-          pages: project.pages.map(page => {
-            if (page.id === pageId) {
-              return {
-                ...page,
-                tabs: page.tabs.map(tab => {
-                  if (tab.id === tabId) {
-                    // Generate unique name for the new type
-                    const existingNames = getExistingNames('tab', projectId, pageId);
+      // Find current tab to get its current name
+      const currentProject = projects.find(p => p.id === projectId);
+      const currentPage = currentProject?.pages?.find(p => p.id === pageId);
+      const currentTab = currentPage?.tabs?.find(t => t.id === tabId);
+      
+      if (!currentTab) {
+        throw new Error('Tab not found');
+      }
+      
+      // Generate a unique name for the new type only if current name would conflict
+      const existingNames = getExistingNames('tab', projectId, pageId)
+        .filter(name => name !== currentTab.name); // Exclude current tab's name
+      
+      // Use display name as the new name, but make it unique if needed
                     const newName = generateUniqueName(newType, existingNames);
-                    return { ...tab, name: newName, type: newType };
-                  }
-                  return tab;
+      
+      // Update tab type and name through workspace service
+      // Also unlock the tab since content is changing
+      await workspaceStateService.updateTab(tabId, {
+        name: newName,
+        tabType: internalType,
+        isLocked: false
+      });
+
+      // Update frontend state to reflect the changes
+      const updatedProjects = projects.map(p => {
+        if (p.id === projectId) {
+        return {
+            ...p,
+            pages: p.pages.map(pa => {
+              if (pa.id === pageId) {
+              return {
+                  ...pa,
+                  tabs: pa.tabs.map(t => {
+                    if (t.id === tabId) {
+                      return { 
+                        ...t, 
+                        name: newName,
+                        type: internalType,
+                        tabType: internalType,
+                        locked: false, 
+                        isLocked: false 
+                      };
+                    }
+                    return t;
                 })
               };
             }
-            return page;
+              return pa;
           })
         };
       }
-      return project;
+        return p;
     });
     setProjects(updatedProjects);
+      
+    } catch (error) {
+      console.error('Error updating tab type:', error);
+      showToastNotification('Failed to update tab type: ' + error.message, 'error');
+    }
   };
 
   // Dropdown drag and drop handlers
@@ -2951,10 +3858,10 @@ export default function HomePage() {
                       <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
-                      {project.pages.length > 0 && (
+                      {project.pages && project.pages.length > 0 && (
                         <svg 
                           style={{ width: '12px', height: '12px' }} 
-                          className={`text-gray-500 mr-2 transition-transform ${project.expanded ? 'rotate-90' : ''} flex-shrink-0`} 
+                          className={`text-gray-500 mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0`} 
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
@@ -3021,7 +3928,7 @@ export default function HomePage() {
 
                   
                   {/* Project Pages */}
-                  {project.expanded && (
+                                        {(project.isExpanded || project.expanded) && (
                     <div className="ml-6 space-y-1">
                       {/* Drop zone for empty project or before first page */}
                       <div
@@ -3052,7 +3959,7 @@ export default function HomePage() {
                         }}
                       />
                       
-                      {project.pages.map((page, index) => (
+                      {(project.pages || []).map((page, index) => (
                         <div key={page.id}>
                           {/* Drop zone between pages */}
                           {index > 0 && (
@@ -3159,7 +4066,7 @@ export default function HomePage() {
                       ))}
                       
                       {/* Drop zone after last page */}
-                      {project.pages.length > 0 && (
+                      {project.pages && project.pages.length > 0 && (
                         <div
                           className={`h-2 rounded transition-colors ${
                             dragOverPage?.projectId === project.id && dragOverPage?.pageId === 'end' ? 'bg-green-200 border border-green-400' : 'bg-transparent'
@@ -3242,7 +4149,7 @@ export default function HomePage() {
                     <div
                       key={tab.id}
                       className={`flex items-center px-4 py-2 border-r border-gray-200 cursor-pointer group ${
-                        tab.active ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-gray-50'
+                        (tab.isActive || tab.active) ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-gray-50'
                       } ${
                         isDragging && draggedTab === tab.id ? 'opacity-50' : ''
                       } ${
@@ -3256,9 +4163,9 @@ export default function HomePage() {
                         maxWidth: '180px',
                         flexShrink: 0
                       }}
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         if (!isDragging) {
-                          selectTab(tab.id);
+                          await selectTab(tab.id);
                         }
                       }}
                       onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
@@ -3309,9 +4216,9 @@ export default function HomePage() {
                       </div>
                       {currentTabs.length > 1 && !tab.locked && (
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            closeTab(tab.id);
+                            await closeTab(tab.id);
                           }}
                           className="ml-2 p-1 rounded hover:bg-red-100 transition opacity-0 group-hover:opacity-100 bg-red-50 flex-shrink-0"
                           title="Close Tab"
@@ -3396,9 +4303,9 @@ export default function HomePage() {
                             style={{ 
                               cursor: isDropdownDragging ? 'grabbing' : 'grab'
                             }}
-                            onClick={() => {
+                            onClick={async () => {
                               if (!isDropdownDragging) {
-                                selectTab(tab.id);
+                                await selectTab(tab.id);
                                 setShowTabDropdown(false);
                               }
                             }}
@@ -3449,9 +4356,9 @@ export default function HomePage() {
                             </div>
                             {currentTabs.length > 1 && !tab.locked && (
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  closeTab(tab.id);
+                                  await closeTab(tab.id);
                                   setShowTabDropdown(false);
                                 }}
                                 className="ml-2 p-1 rounded hover:bg-red-100 transition"
@@ -3512,7 +4419,7 @@ export default function HomePage() {
               }
               
               // Check if any project has pages
-              const hasAnyPages = projects.some(project => project.pages.length > 0);
+              const hasAnyPages = projects.some(project => project.pages && project.pages.length > 0);
               
               // Have projects but no pages in any project
               if (!hasAnyPages) {
@@ -3555,8 +4462,8 @@ export default function HomePage() {
                   <span>{(() => {
                     const currentProject = projects.find(p => p.id === selectedPage.projectId);
                     const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = currentPage?.tabs.find(t => t.active);
-                    return activeTab?.name || 'Design Tables';
+                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
+                    return activeTab?.name || 'Welcome';
                   })()}</span>
                 </h2>
                 <select 
@@ -3564,13 +4471,13 @@ export default function HomePage() {
                   value={(() => {
                     const currentProject = projects.find(p => p.id === selectedPage.projectId);
                     const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = currentPage?.tabs.find(t => t.active);
-                    return activeTab?.type || 'Design Tables';
+                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
+                    return mapTabTypeToDisplayName(activeTab?.type || activeTab?.tabType) || 'Design Tables';
                   })()}
                   onChange={(e) => {
                     const currentProject = projects.find(p => p.id === selectedPage.projectId);
                     const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = currentPage?.tabs.find(t => t.active);
+                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
                     if (activeTab) {
                       handleTabTypeChange(activeTab.id, e.target.value);
                     }
@@ -3587,9 +4494,34 @@ export default function HomePage() {
                 {(() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                  const activeTab = currentPage?.tabs.find(t => t.active);
+                  const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
                   
-                  if (activeTab?.type === 'Snow Load') {
+                  // Only create Welcome tab if NO tabs exist at all (not just no active tab)
+                  if (currentPage && (!currentPage.tabs || currentPage.tabs.length === 0)) {
+                    console.log('No tabs found, creating Welcome tab for page:', currentPage.id);
+                    createWelcomeTabIfNeeded(currentPage.id);
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                          <p className="text-gray-600">Creating Welcome tab...</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // If tabs exist but no active tab, this should be handled by findActiveTabOrWelcome
+                  if (!activeTab) {
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <p className="text-gray-600">Loading tab content...</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (activeTab?.type === 'snow_load' || activeTab?.tabType === 'snow_load') {
                     const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
                     const snowDefaults = {
                       location: 'North Vancouver',
@@ -3598,9 +4530,13 @@ export default function HomePage() {
                       ca: 1,
                       cb: 0.8
                     };
-                    const data = { ...snowDefaults, ...(snowLoadTabData[tabKey] || {}) };
+                    // Use merged data from database + template, fallback to local state for immediate updates
+                    const mergedSnowDefaults = activeTab.mergedData?.snowDefaults || {};
+                    const localSnowData = snowLoadTabData[tabKey] || {};
+                    const data = { ...snowDefaults, ...mergedSnowDefaults, ...localSnowData };
                     
-                    const handleSnowChange = (field, value) => {
+                    const handleSnowChange = async (field, value) => {
+                      // Update local state immediately for responsive UI
                       setSnowLoadTabData(prev => ({
                         ...prev,
                         [tabKey]: {
@@ -3608,6 +4544,20 @@ export default function HomePage() {
                           [field]: value
                         }
                       }));
+                      
+                      // Save to database via workspace service (DELTA ONLY)
+                      try {
+                        // Only send the changed field, not the entire structure
+                        const deltaData = {
+                          snowDefaults: {
+                            [field]: value
+                          }
+                        };
+                        await workspaceStateService.updateTabData(activeTab.id, 'snow_load', deltaData);
+                      } catch (error) {
+                        console.error('Error saving snow load data:', error);
+                        showToastNotification('Failed to save changes: ' + error.message, 'error');
+                      }
                     };
 
                     // Snow Drifting Load Calculator state and calculations
@@ -3642,7 +4592,10 @@ export default function HomePage() {
                       Cw: 1.0 // Wind factor
                     };
 
-                    const driftData = { ...driftDefaults, ...(snowLoadTabData[tabKey] || {}) };
+                    // Use merged data from database + template, fallback to local state for immediate updates
+                    const mergedDriftDefaults = activeTab.mergedData?.driftDefaults || {};
+                    const localDriftData = snowLoadTabData[tabKey] || {};
+                    const driftData = { ...driftDefaults, ...mergedDriftDefaults, ...localDriftData };
                     
                     // Sync drift inputs with current Snow Load table (B2–B18) for live updates
                     const driftLocationData = snowLoadData.find(item => item.city === data.location);
@@ -3661,7 +4614,8 @@ export default function HomePage() {
                     // Keep an explicit field for display-only distribution table
                     driftData.Ss_for_distribution = ssLive;
 
-                    const handleDriftChange = (field, value) => {
+                    const handleDriftChange = async (field, value) => {
+                      // Update local state immediately for responsive UI
                       setSnowLoadTabData(prev => ({
                         ...prev,
                         [tabKey]: {
@@ -3669,6 +4623,20 @@ export default function HomePage() {
                           [field]: value
                         }
                       }));
+                      
+                      // Save to database via workspace service (DELTA ONLY)
+                      try {
+                        // Only send the changed drift field, not the entire structure
+                        const deltaData = {
+                          driftDefaults: {
+                            [field]: value
+                          }
+                        };
+                        await workspaceStateService.updateTabData(activeTab.id, 'snow_load', deltaData);
+                      } catch (error) {
+                        console.error('Error saving drift data:', error);
+                        showToastNotification('Failed to save changes: ' + error.message, 'error');
+                      }
                     };
 
                     // Case I Calculations
@@ -4230,7 +5198,7 @@ export default function HomePage() {
                     );
                   }
                   
-                  if (activeTab?.type === 'Wind Load') {
+                  if (activeTab?.type === 'wind_load' || activeTab?.tabType === 'wind_load') {
                     const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
                     const windDefaults = {
                       location: 'Richmond',
@@ -4249,9 +5217,13 @@ export default function HomePage() {
                       cpiMin: -0.45,
                       cpiMax: 0.3
                     };
-                    const data = { ...windDefaults, ...(windLoadTabData[tabKey] || {}) };
+                    // Use merged data from database + template, fallback to local state for immediate updates
+                    const mergedWindDefaults = activeTab.mergedData?.windDefaults || {};
+                    const localWindData = windLoadTabData[tabKey] || {};
+                    const data = { ...windDefaults, ...mergedWindDefaults, ...localWindData };
                     
-                    const handleWindChange = (field, value) => {
+                    const handleWindChange = async (field, value) => {
+                      // Update local state immediately for responsive UI
                       setWindLoadTabData(prev => ({
                         ...prev,
                         [tabKey]: {
@@ -4259,6 +5231,20 @@ export default function HomePage() {
                           [field]: value
                         }
                       }));
+                      
+                      // Save to database via workspace service (DELTA ONLY)
+                      try {
+                        // Only send the changed field, not the entire structure
+                        const deltaData = {
+                          windDefaults: {
+                            [field]: value
+                          }
+                        };
+                        await workspaceStateService.updateTabData(activeTab.id, 'wind_load', deltaData);
+                      } catch (error) {
+                        console.error('Error saving wind load data:', error);
+                        showToastNotification('Failed to save changes: ' + error.message, 'error');
+                      }
                     };
 
                     // Load wind data if not loaded
@@ -4634,10 +5620,11 @@ export default function HomePage() {
                   
 
                   
-                  if (activeTab?.type === 'Seismic Template') {
+                  if (activeTab?.type === 'seismic' || activeTab?.tabType === 'seismic') {
                     // Unique key for this tab
                     const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
-                    const data = seismicTabData[tabKey] || {
+                    // Use merged data from database + template, fallback to local state for immediate updates
+                    const seismicDefaults = {
                       designer: '',
                       address: '',
                       project: '',
@@ -4646,8 +5633,16 @@ export default function HomePage() {
                       bldgCode: '',
                       apiKey: ''
                     };
-                    const seismicResult = seismicResults[tabKey] || null;
-                    const handleChange = (field, value) => {
+                    const mergedSeismicData = activeTab.mergedData?.seismicTabData || {};
+                    const localSeismicData = seismicTabData[tabKey] || {};
+                    const data = { ...seismicDefaults, ...mergedSeismicData, ...localSeismicData };
+                    
+                    // Use seismic results from database if available, otherwise use local React state
+                    const persistedSeismicResults = activeTab.mergedData?.seismicResults || {};
+                    const localSeismicResults = seismicResults[tabKey] || null;
+                    const seismicResult = localSeismicResults || (persistedSeismicResults.site_class ? persistedSeismicResults : null);
+                    const handleChange = async (field, value) => {
+                      // Update local state immediately for responsive UI
                       setSeismicTabData(prev => ({
                         ...prev,
                         [tabKey]: {
@@ -4660,6 +5655,23 @@ export default function HomePage() {
                       if ((field === 'address' || field === 'apiKey') && value.trim()) {
                         setSeismicFormError('');
                         setShowSeismicValidationError(false);
+                      }
+                      
+                      // Save to database via workspace service (DELTA ONLY)
+                      // NOTE: API key should never be stored in tab_data as it's managed globally
+                      if (field !== 'apiKey') {
+                        try {
+                          // Only send the changed field, not the entire structure
+                          const deltaData = {
+                            seismicTabData: {
+                              [field]: value
+                            }
+                          };
+                          await workspaceStateService.updateTabData(activeTab.id, 'seismic', deltaData);
+                        } catch (error) {
+                          console.error('Error saving seismic data:', error);
+                          showToastNotification('Failed to save changes: ' + error.message, 'error');
+                        }
                       }
                     };
                     return (
@@ -4835,10 +5847,35 @@ export default function HomePage() {
                                 });
                                 if (!res.ok) throw new Error('Failed to fetch seismic info');
                                 const result = await res.json();
+                                console.log('🎯 Seismic API response received:', result);
                                 setSeismicResults(prev => ({
                                   ...prev,
                                   [tabKey]: result
                                 }));
+                                console.log('🎯 About to save seismic results to database...');
+                                
+                                // Save seismic results to database for persistence
+                                try {
+                                  const seismicResultsDelta = {
+                                    seismicResults: {
+                                      site_class: result.site_class,
+                                      coordinates: result.coordinates,
+                                      address_checked: result.address_checked,
+                                      rgb: result.rgb,
+                                      most_similar_soil: result.most_similar_soil,
+                                      soil_pressure: result.soil_pressure,
+                                      sa_site: result.sa_site,
+                                      sa_x450: result.sa_x450
+                                    }
+                                  };
+                                  console.log('🔍 Saving seismic results to database:', seismicResultsDelta);
+                                  await workspaceStateService.saveTabDataImmediately(activeTab.id, 'seismic', seismicResultsDelta);
+                                  console.log('✅ Seismic results saved successfully');
+                                } catch (error) {
+                                  console.error('❌ Error saving seismic results:', error);
+                                  // Don't show error to user as this is background save - the UI is already working
+                                }
+                                
                                 // Optionally update sedimentTypes with probabilities
                                 if (result.most_similar_soil && result.rgb && currentSedimentTypes.length > 0) {
                                   const rgb = result.rgb;
@@ -4873,7 +5910,7 @@ export default function HomePage() {
                           <button
                             className="bg-gray-400 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-500 transition ml-4"
                             style={{ minWidth: '120px' }}
-                            onClick={() => {
+                            onClick={async () => {
                               setSeismicResults(prev => ({
                                 ...prev,
                                 [tabKey]: null
@@ -4893,6 +5930,16 @@ export default function HomePage() {
                                   apiKey: ''
                                 }
                               }));
+                              
+                              // Clear data from database as well
+                              try {
+                                // Use the new replace method to completely replace with empty object
+                                await workspaceApiService.replaceTabData(activeTab.id, {});
+                                console.log('✅ Seismic data completely replaced with empty object in database');
+                              } catch (error) {
+                                console.error('Error clearing seismic data:', error);
+                                showToastNotification('Failed to clear data: ' + error.message, 'error');
+                              }
                             }}
                           >
                             Clear Data
@@ -5021,14 +6068,46 @@ export default function HomePage() {
                   // Default content for other tabs
                   return (
                     <>
-                      {activeTab?.type === 'Welcome' ? (
-                        <>
-                          <p>Welcome to your new workspace!</p>
-                          <p className="mt-2">This is a blank canvas where you can start creating your project. Use the "+" button to add new tabs and begin your work.</p>
-                        </>
+                      {(activeTab?.type === 'Welcome' || activeTab?.tabType === 'Welcome' || activeTab?.type === 'welcome' || activeTab?.tabType === 'welcome') ? (
+                        <div className="welcome-content">
+                          <div className="feature-overview mb-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Available Tools:</h3>
+                            <ul className="list-disc list-inside space-y-2 text-gray-600">
+                              <li><strong>Snow Load Calculator</strong> - Calculate snow loads for various roof configurations</li>
+                              <li><strong>Wind Load Calculator</strong> - Determine wind pressure loads for structures</li>
+                              <li><strong>Seismic Analysis</strong> - Get seismic hazard data for specific locations</li>
+                            </ul>
+                          </div>
+                          <div className="getting-started">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Getting Started:</h3>
+                            <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                              <li>Create a new tab using the "+" button</li>
+                              <li>Select the appropriate calculator type</li>
+                              <li>Enter your project parameters</li>
+                              <li>Review the calculated results</li>
+                            </ol>
+                          </div>
+                        </div>
+                      ) : (activeTab?.type === 'design_tables' || activeTab?.tabType === 'design_tables') ? (
+                        <div className="design-tables-content">
+                          <div className="workspace-area">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Design Tables & Diagrams</h3>
+                            <p className="text-gray-600 mb-6">This is your workspace for helper diagrams, reference tables, and design documentation.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="table-placeholder border-2 border-dashed border-gray-300 rounded-lg p-6">
+                                <h4 className="text-md font-semibold text-gray-700 mb-2">Helper Tables</h4>
+                                <p className="text-gray-500">Add structural design tables, load charts, and reference data here.</p>
+                              </div>
+                              <div className="diagram-placeholder border-2 border-dashed border-gray-300 rounded-lg p-6">
+                                <h4 className="text-md font-semibold text-gray-700 mb-2">Design Diagrams</h4>
+                                <p className="text-gray-500">Create and manage structural diagrams, sketches, and visual aids.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       ) : (
                         <>
-                          <p>Welcome to the {activeTab?.name || 'Design Tables'} workspace.</p>
+                          <p>Welcome to the {activeTab?.name || 'workspace'} area.</p>
                           <p className="mt-2">This is where you can manage your project information and calculations.</p>
                         </>
                       )}
@@ -5426,9 +6505,12 @@ export default function HomePage() {
                 onClick={() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                  const activeTab = currentPage?.tabs.find(t => t.active);
+                  const activeTab = findActiveTab(currentPage?.tabs);
                   const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab?.id}`;
-                  const currentData = seismicTabData[tabKey] || {};
+                  // Use merged data from database + template, fallback to local state
+                  const mergedSeismicData = activeTab.mergedData?.seismicTabData || {};
+                  const localSeismicData = seismicTabData[tabKey] || {};
+                  const currentData = { ...mergedSeismicData, ...localSeismicData };
                   
                   // If user has stored API key, we'll retrieve it in handleStoreApiKey
                   // If not, use the one from the input field
