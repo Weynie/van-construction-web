@@ -429,7 +429,7 @@ export const workspaceStateService = {
   /**
    * Create tab with optimistic update
    */
-  async createTab(pageId, name, tabType) {
+  async createTab(pageId, name, tabType, position = null) {
     const realPageId = this.getRealId(pageId);
     const tempId = this.generateTempId();
     
@@ -441,7 +441,7 @@ export const workspaceStateService = {
       pageId: realPageId,
       name,
       tabType,
-      displayOrder: 0,
+      displayOrder: position || 0,
       isActive: true,
       isLocked: false,
       mergedData: templateData,
@@ -455,7 +455,7 @@ export const workspaceStateService = {
     });
 
     try {
-      const realTab = await workspaceApiService.createTab(realPageId, name, tabType);
+      const realTab = await workspaceApiService.createTab(realPageId, name, tabType, position);
       this.mapTempId(tempId, realTab.id);
       
       // Merge with template data

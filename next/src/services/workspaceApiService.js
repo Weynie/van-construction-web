@@ -286,12 +286,17 @@ export const workspaceApiService = {
   /**
    * Create a new tab
    */
-  async createTab(pageId, name, tabType) {
+  async createTab(pageId, name, tabType, position = null) {
     try {
+      const payload = { name, tabType };
+      if (position !== null && position !== undefined) {
+        payload.position = position;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/workspace/pages/${pageId}/tabs`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ name, tabType }),
+        body: JSON.stringify(payload),
       });
       
       return await this.handleResponse(response);
@@ -508,5 +513,56 @@ export const workspaceApiService = {
       console.error('Backend health check failed:', error);
       return false;
     }
-  }
+  },
+
+  // ==================== USER PREFERENCES ====================
+
+  /**
+   * Store user preference
+   */
+  async storeUserPreference(key, value) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/preferences`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ key, value }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error storing user preference:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get user preference
+   */
+  async getUserPreference(key) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/preferences/${key}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting user preference:', error);
+      throw error;
+    }
+  },
+
+
 }; 

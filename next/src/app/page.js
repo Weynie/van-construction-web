@@ -172,87 +172,13 @@ export default function HomePage() {
       
       if (workspaceData.projects && workspaceData.projects.length > 0) {
         console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
+        setProjects(workspaceData.projects);
         
-        // Find the active tab to jump to last used tab
-        let activeTabFound = false;
-        let targetProject = null;
-        let targetPage = null;
-        let activeTabId = null;
-        
-        for (const project of workspaceData.projects) {
-          if (project.pages) {
-            for (const page of project.pages) {
-              if (page.tabs) {
-                const activeTab = page.tabs.find(tab => tab.isActive || tab.active);
-                if (activeTab) {
-                  targetProject = project;
-                  targetPage = page;
-                  activeTabId = activeTab.id;
-                  activeTabFound = true;
-                  console.log('🎯 Found active tab:', activeTab.name, 'in page:', page.name);
-                  break;
-                }
-              }
-            }
-            if (activeTabFound) break;
-          }
-        }
-        
-        if (activeTabFound && targetProject && targetPage) {
-          // Jump to the page with active tab
-          console.log('📄 Jumping to page with active tab:', targetPage.name);
-          setSelectedPage({ projectId: targetProject.id, pageId: targetPage.id });
-          
-          // Update the projects state to ensure the active tab is marked correctly in UI
-          const updatedProjects = workspaceData.projects.map(project => {
-            if (project.id === targetProject.id) {
-              return {
-                ...project,
-                pages: (project.pages || []).map(page => {
-                  if (page.id === targetPage.id) {
-                    return {
-                      ...page,
-                      tabs: (page.tabs || []).map(tab => ({
-                        ...tab,
-                        active: tab.id === activeTabId,
-                        isActive: tab.id === activeTabId
-                      }))
-                    };
-                  }
-                  return {
-                    ...page,
-                    tabs: (page.tabs || []).map(tab => ({
-                      ...tab,
-                      active: false,
-                      isActive: false
-                    }))
-                  };
-                })
-              };
-            }
-            return {
-              ...project,
-              pages: (project.pages || []).map(page => ({
-                ...page,
-                tabs: (page.tabs || []).map(tab => ({
-                  ...tab,
-                  active: false,
-                  isActive: false
-                }))
-              }))
-            };
-          });
-          setProjects(updatedProjects);
-          console.log('✅ Active tab state restored in UI:', activeTabId);
-        } else {
-          // Fallback to first available page
-          setProjects(workspaceData.projects); // Set projects without active tab modification
-          const firstProject = workspaceData.projects[0];
-          if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
-            const firstPage = firstProject.pages[0];
-            console.log('📄 Setting default selected page:', firstPage.name);
-            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
-          }
+        // Find the first project and page to set as selected
+        const firstProject = workspaceData.projects[0];
+        if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+          const firstPage = firstProject.pages[0];
+          setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
         }
       } else {
         console.log('📝 No existing projects, initializing default workspace...');
@@ -1033,26 +959,26 @@ export default function HomePage() {
     // For copy operations, we now allow pasting to the same page (but not to the exact same tab)
     // This check is removed to allow same-page copying
     
-              // Check for duplicate names
+    // Check for duplicate names
     const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
     if (!targetPage) return;
     
     const existingTabNames = targetPage.tabs.map(t => t.name);
-              let newTabName = tab.name;
-              
-              // For copy operations, add "Copy" suffix to make it clear it's a copy
-              if (clipboard.type === 'copy') {
-                newTabName = createCopy(tab.name, existingTabNames);
-              } else if (existingTabNames.includes(newTabName)) {
-                // For cut operations, only modify name if there's a conflict
-                let counter = 1;
-                while (existingTabNames.includes(`${newTabName} ${counter}`)) {
-                  counter++;
-                }
-                newTabName = `${newTabName} ${counter}`;
-              }
-              
-    if (isCutOperation) {
+    let newTabName = tab.name;
+    
+    // For copy operations, add "Copy" suffix to make it clear it's a copy
+    if (clipboard.type === 'copy') {
+      newTabName = createCopy(tab.name, existingTabNames);
+    } else if (existingTabNames.includes(newTabName)) {
+      // For cut operations, only modify name if there's a conflict
+      let counter = 1;
+      while (existingTabNames.includes(`${newTabName} ${counter}`)) {
+        counter++;
+      }
+      newTabName = `${newTabName} ${counter}`;
+    }
+    
+    if (clipboard.type === 'cut') {
       // For cut operation: Delete original first, then create new with preserved data
       try {
         console.log('🔄 Starting cut/paste operation for tab:', tab.id, 'name:', tab.name);
@@ -1066,33 +992,38 @@ export default function HomePage() {
         
         // Step 3: Create new tab in target location with potentially same name
         console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
-        const movedTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        // For paste to page, add to the end
+        const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
+        const position = targetPage?.tabs?.length || 0;
+        const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         console.log('✅ New tab created in target location:', movedTab.id);
         
         // Step 4: Restore the original data to the new tab
         if (tabData && tabData.mergedData) {
-          await workspaceStateService.updateTabData(movedTab.id, tab.tabType || tab.type, tabData.mergedData);
+          await workspaceApiService.replaceTabData(movedTab.id, tabData.mergedData);
           console.log('✅ Original data restored to new tab');
         }
         
-        // Step 4: Update local state with moved tab
+        // Step 5: Update local state with moved tab
         const updatedProjects = projects.map(p => {
           if (p.id === targetProjectId) {
             return {
               ...p,
               pages: p.pages.map(pg => {
                 if (pg.id === targetPageId) {
-              const newTab = {
+                  const newTab = {
                     ...movedTab,
-                name: newTabName,
-                    active: false,
-                    isActive: false,
+                    name: newTabName,
+                    active: true,
+                    isActive: true,
                     mergedData: tabData?.mergedData  // Preserve the original data
                   };
                   
+                  // Set all other tabs as inactive and the new tab as active
+                  const updatedTabs = pg.tabs.map(t => ({ ...t, active: false, isActive: false })).concat(newTab);
                   return {
                     ...pg,
-                    tabs: [...pg.tabs, newTab]
+                    tabs: updatedTabs
                   };
                 }
                 return pg;
@@ -1104,20 +1035,24 @@ export default function HomePage() {
         
         setProjects(updatedProjects);
         console.log('✅ Tab moved successfully (cut/paste):', newTabName);
+        showToastNotification(`Tab "${newTabName}" moved successfully`, 'success');
       } catch (error) {
         console.error('❌ Failed to move tab:', error);
         showToastNotification('Failed to move tab: ' + error.message, 'error');
-                }
+      }
     } else {
       // For copy operation: Create new tab (existing logic)
       try {
-        const createdTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        // For paste to page, add to the end
+        const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
+        const position = targetPage?.tabs?.length || 0;
+        const createdTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         
         // Copy the tab data if it exists in the clipboard
         if (tabData && tabData.mergedData) {
-          await workspaceStateService.updateTabData(createdTab.id, tab.tabType || tab.type, tabData.mergedData);
-                }
-                
+          await workspaceApiService.replaceTabData(createdTab.id, tabData.mergedData);
+        }
+        
         // Update local state with the new tab
         const updatedProjects = projects.map(p => {
           if (p.id === targetProjectId) {
@@ -1128,25 +1063,28 @@ export default function HomePage() {
                   const newTab = {
                     ...createdTab,
                     name: newTabName,
-                    active: false,
-                    isActive: false,  // Override backend's default isActive: true
+                    active: true,
+                    isActive: true,  // Make the new tab active
                     mergedData: tabData?.mergedData  // Preserve the merged data if available
                   };
-              
-              return {
-                ...pg,
-                tabs: [...pg.tabs, newTab]
-              };
-            }
-            return pg;
-          })
-        };
-      }
-      return p;
-    });
-    
-    setProjects(updatedProjects);
+                  
+                  // Set all other tabs as inactive and the new tab as active
+                  const updatedTabs = pg.tabs.map(t => ({ ...t, active: false, isActive: false })).concat(newTab);
+                  return {
+                    ...pg,
+                    tabs: updatedTabs
+                  };
+                }
+                return pg;
+              })
+            };
+          }
+          return p;
+        });
+        
+        setProjects(updatedProjects);
         console.log('✅ Tab copied successfully:', newTabName);
+        showToastNotification(`Tab "${newTabName}" copied successfully`, 'success');
       } catch (error) {
         console.error('❌ Failed to copy tab:', error);
         showToastNotification('Failed to copy tab: ' + error.message, 'error');
@@ -1238,12 +1176,15 @@ export default function HomePage() {
         
         // Step 3: Create new tab in target location
         console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
-        const movedTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        // Calculate position after the target tab
+        const targetTabIndex = targetPage.tabs.findIndex(t => t.id === targetTabId);
+        const position = targetTabIndex + 1;
+        const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         console.log('✅ New tab created in target location:', movedTab.id);
         
         // Step 4: Restore the original data to the new tab
         if (tabData && tabData.mergedData) {
-          await workspaceStateService.updateTabData(movedTab.id, tab.tabType || tab.type, tabData.mergedData);
+          await workspaceApiService.replaceTabData(movedTab.id, tabData.mergedData);
           console.log('✅ Original data restored to new tab');
         }
         
@@ -1257,8 +1198,8 @@ export default function HomePage() {
               const newTab = {
                     ...movedTab,
                 name: newTabName,
-                    active: false,
-                    isActive: false,
+                    active: true,
+                    isActive: true,
                     mergedData: tabData?.mergedData
               };
               
@@ -1267,9 +1208,13 @@ export default function HomePage() {
                   const newTabs = [...pg.tabs];
                   newTabs.splice(targetTabIndex + 1, 0, newTab);
                   
+                  // Set all other tabs as inactive and the new tab as active
+                  const updatedTabs = newTabs.map(t => ({ ...t, active: false, isActive: false }));
+                  updatedTabs[targetTabIndex + 1] = { ...updatedTabs[targetTabIndex + 1], active: true, isActive: true };
+                  
                   return {
                     ...pg,
-                    tabs: newTabs
+                    tabs: updatedTabs
                   };
                 }
                 return pg;
@@ -1288,11 +1233,14 @@ export default function HomePage() {
     } else {
       // For copy operation: Create new tab (existing logic)
       try {
-        const createdTab = await workspaceStateService.createTab(targetPageId, newTabName, tab.tabType || tab.type);
+        // Calculate position after the target tab
+        const targetTabIndex = targetPage.tabs.findIndex(t => t.id === targetTabId);
+        const position = targetTabIndex + 1;
+        const createdTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         
         // Copy the tab data if it exists in the clipboard
         if (tabData && tabData.mergedData) {
-          await workspaceStateService.updateTabData(createdTab.id, tab.tabType || tab.type, tabData.mergedData);
+          await workspaceApiService.replaceTabData(createdTab.id, tabData.mergedData);
                 }
                 
       // Update local state with the new tab
@@ -1305,8 +1253,8 @@ export default function HomePage() {
                 const newTab = {
                   ...createdTab,
                   name: newTabName,
-                  active: false,
-                  isActive: false,  // Override backend's default isActive: true
+                  active: true,
+                  isActive: true,  // Make the new tab active
                   mergedData: tabData?.mergedData  // Preserve the merged data if available
                 };
               
@@ -1316,9 +1264,13 @@ export default function HomePage() {
               const newTabs = [...pg.tabs];
               newTabs.splice(targetTabIndex + 1, 0, newTab);
               
+              // Set all other tabs as inactive and the new tab as active
+              const updatedTabs = newTabs.map(t => ({ ...t, active: false, isActive: false }));
+              updatedTabs[targetTabIndex + 1] = { ...updatedTabs[targetTabIndex + 1], active: true, isActive: true };
+              
               return {
                 ...pg,
-                tabs: newTabs
+                tabs: updatedTabs
               };
             }
             return pg;
@@ -2134,13 +2086,16 @@ export default function HomePage() {
                     const copiedTab = {
                         ...createdTab,
                       name: newTabName,
-                        active: false,
-                        isActive: false,  // Override backend's default isActive: true
+                        active: true,
+                        isActive: true,  // Make the new tab active
                         mergedData: tab.mergedData  // Preserve the merged data
                     };
+                    
+                    // Set all other tabs as inactive and the new tab as active
+                    const updatedTabs = pa.tabs.map(t => ({ ...t, active: false, isActive: false })).concat(copiedTab);
                     return {
                       ...pa,
-                      tabs: [...pa.tabs, copiedTab]
+                      tabs: updatedTabs
                     };
                   }
                   return pa;
@@ -2177,13 +2132,18 @@ export default function HomePage() {
                       const newTabRight = {
                         ...createdTab,
                         name: newTabNameRight,
-                        active: false,
-                        isActive: false
+                        active: true,
+                        isActive: true
                       };
                     newTabs.splice(tabIndex + 1, 0, newTabRight);
+                    
+                    // Set all other tabs as inactive and the new tab as active
+                    const updatedTabs = newTabs.map(t => ({ ...t, active: false, isActive: false }));
+                    updatedTabs[tabIndex + 1] = { ...updatedTabs[tabIndex + 1], active: true, isActive: true };
+                    
                     return {
                       ...pa,
-                      tabs: newTabs
+                      tabs: updatedTabs
                     };
                   }
                   return pa;
@@ -2656,6 +2616,27 @@ export default function HomePage() {
 
   const selectPage = (projectId, pageId) => {
     setSelectedPage({ projectId, pageId });
+    
+    // Auto-switch to the first tab only if no active tab exists on the page
+    setTimeout(() => {
+      const project = projects.find(p => p.id === projectId);
+      const page = project?.pages?.find(p => p.id === pageId);
+      
+      if (page && page.tabs && page.tabs.length > 0) {
+        // Check if there's already an active tab on this page
+        const activeTab = page.tabs.find(t => t.isActive || t.active);
+        
+        if (!activeTab) {
+          // No active tab found, switch to the first tab
+          const firstTab = page.tabs[0];
+          console.log('🔄 Auto-switching to first tab when switching to page:', firstTab.name);
+          selectTab(firstTab.id);
+        } else {
+          // Active tab exists, don't override it
+          console.log('✅ Page has active tab, preserving selection:', activeTab.name);
+        }
+      }
+    }, 100); // Small delay to ensure state is updated
   };
 
   const handleTabContextMenu = (e, tabId) => {
@@ -2707,16 +2688,10 @@ export default function HomePage() {
     );
     
     if (nonWelcomeTabs && nonWelcomeTabs.length > 0) {
-      // Auto-activate the first non-Welcome tab
-      const tabToActivate = nonWelcomeTabs[0];
-      console.log('Auto-activating non-Welcome tab:', tabToActivate.name);
-      
-      // Set this tab as active
-      setTimeout(() => {
-        selectTab(tabToActivate.id);
-      }, 0);
-      
-      return tabToActivate;
+      // Return the first non-Welcome tab
+      const firstNonWelcomeTab = nonWelcomeTabs[0];
+      console.log('Found non-Welcome tab:', firstNonWelcomeTab.name);
+      return firstNonWelcomeTab;
     }
     
     // If no non-Welcome tabs, try to find Welcome tab
@@ -2733,6 +2708,8 @@ export default function HomePage() {
     // This will be handled by the createWelcomeTabIfNeeded function
     return null;
   };
+
+
 
   // Helper function to ensure Welcome tab exists when needed
   const createWelcomeTabIfNeeded = async (pageId) => {

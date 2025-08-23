@@ -291,6 +291,8 @@ public class WorkspaceController {
             Long userId = getUserIdFromRequest(request);
             String name = (String) payload.get("name");
             String tabType = (String) payload.get("tabType");
+            Integer position = payload.get("position") != null ? 
+                Integer.valueOf(payload.get("position").toString()) : null;
             
             if (name == null || name.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
@@ -302,7 +304,7 @@ public class WorkspaceController {
                     .body(Map.of("error", "Tab type is required"));
             }
             
-            Tab tab = workspaceDataService.createTab(pageId, userId, name.trim(), tabType.trim());
+            Tab tab = workspaceDataService.createTab(pageId, userId, name.trim(), tabType.trim(), position);
             return ResponseEntity.status(HttpStatus.CREATED).body(tab);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
@@ -471,4 +473,6 @@ public class WorkspaceController {
                 .body(Map.of("error", e.getMessage()));
         }
     }
+    
+
 } 

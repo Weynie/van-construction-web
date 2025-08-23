@@ -247,6 +247,10 @@ public class WorkspaceDataService {
     }
     
     public Tab createTab(UUID pageId, Long userId, String name, String tabType) {
+        return createTab(pageId, userId, name, tabType, null);
+    }
+    
+    public Tab createTab(UUID pageId, Long userId, String name, String tabType, Integer position) {
         // Verify page ownership
         Page page = pageRepository.findById(pageId)
             .orElseThrow(() -> new RuntimeException("Page not found"));
@@ -273,7 +277,28 @@ public class WorkspaceDataService {
         tab.setPageId(pageId);
         tab.setName(name);
         tab.setTabType(tabType);
-        tab.setDisplayOrder(tabRepository.findMaxDisplayOrderByPageId(pageId) + 1);
+        
+        // Set display order based on position
+        if (position != null && position >= 0) {
+            // Insert at specific position - shift existing tabs
+            List<Tab> existingTabs = tabRepository.findByPageIdOrderByDisplayOrderAsc(pageId);
+            if (position <= existingTabs.size()) {
+                // Shift tabs at and after the position
+                for (int i = position; i < existingTabs.size(); i++) {
+                    Tab existingTab = existingTabs.get(i);
+                    existingTab.setDisplayOrder(existingTab.getDisplayOrder() + 1);
+                    tabRepository.save(existingTab);
+                }
+                tab.setDisplayOrder(position);
+            } else {
+                // Position is beyond existing tabs, put at end
+                tab.setDisplayOrder(tabRepository.findMaxDisplayOrderByPageId(pageId) + 1);
+            }
+        } else {
+            // Default behavior - put at end
+            tab.setDisplayOrder(tabRepository.findMaxDisplayOrderByPageId(pageId) + 1);
+        }
+        
         tab.setIsActive(true);
         tab.setIsLocked(false);
         
@@ -543,4 +568,6 @@ public class WorkspaceDataService {
         // Initialize empty workspace - users will learn to create their first project
         // No default projects created, promoting user engagement and learning
     }
+    
+
 } 
