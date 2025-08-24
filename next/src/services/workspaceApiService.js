@@ -564,5 +564,76 @@ export const workspaceApiService = {
     }
   },
 
+  // ==================== ACTIVE STATE MANAGEMENT ====================
+
+  /**
+   * Update active project
+   */
+  async updateActiveProject(projectId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/projects/${projectId}/active`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating active project:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update active page
+   */
+  async updateActivePage(pageId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/pages/${pageId}/active`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating active page:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get last active state (project, page, tab)
+   */
+  async getLastActiveState() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/active-state`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting last active state:', error);
+      throw error;
+    }
+  },
+
 
 }; 

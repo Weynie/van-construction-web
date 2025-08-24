@@ -474,5 +474,48 @@ public class WorkspaceController {
         }
     }
     
+    // ==================== ACTIVE STATE MANAGEMENT ====================
+    
+    @PutMapping("/projects/{projectId}/active")
+    public ResponseEntity<?> updateActiveProject(HttpServletRequest request, @PathVariable UUID projectId) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            workspaceDataService.updateActiveProject(projectId, userId);
+            return ResponseEntity.ok(Map.of("message", "Active project updated"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @PutMapping("/pages/{pageId}/active")
+    public ResponseEntity<?> updateActivePage(HttpServletRequest request, @PathVariable UUID pageId) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            workspaceDataService.updateActivePage(pageId, userId);
+            return ResponseEntity.ok(Map.of("message", "Active page updated"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/active-state")
+    public ResponseEntity<?> getLastActiveState(HttpServletRequest request) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            Map<String, Object> activeState = workspaceDataService.getLastActiveState(userId);
+            return ResponseEntity.ok(activeState);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
 
 } 

@@ -174,11 +174,48 @@ export default function HomePage() {
         console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
         setProjects(workspaceData.projects);
         
-        // Find the first project and page to set as selected
-        const firstProject = workspaceData.projects[0];
-        if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
-          const firstPage = firstProject.pages[0];
-          setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+        // Try to restore the last active state
+        try {
+          const restoredState = await workspaceStateService.restoreActiveState(workspaceData);
+          console.log('🔄 Restored active state:', restoredState);
+          
+          if (restoredState.activeProject && restoredState.activePage) {
+            console.log('✅ Restoring last active project and page');
+            
+            // Update the projects array with the restored expansion state
+            const updatedProjects = workspaceData.projects.map(project => {
+              if (project.id === restoredState.activeProject.id) {
+                return {
+                  ...project,
+                  isExpanded: restoredState.activeProject.isExpanded
+                };
+              }
+              return project;
+            });
+            
+            setProjects(updatedProjects);
+            
+            setSelectedPage({ 
+              projectId: restoredState.activeProject.id, 
+              pageId: restoredState.activePage.id 
+            });
+          } else {
+            console.log('📝 No active state found, using first project and page');
+            // Fallback to first project and page
+            const firstProject = workspaceData.projects[0];
+            if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+              const firstPage = firstProject.pages[0];
+              setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+            }
+          }
+        } catch (activeStateError) {
+          console.warn('⚠️ Failed to restore active state, using defaults:', activeStateError);
+          // Fallback to first project and page
+          const firstProject = workspaceData.projects[0];
+          if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+            const firstPage = firstProject.pages[0];
+            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+          }
         }
       } else {
         console.log('📝 No existing projects, initializing default workspace...');
@@ -397,6 +434,8 @@ export default function HomePage() {
         case 'NOTIFICATION':
           showToastNotification(change.message, change.notificationType);
           break;
+          
+
           
         default:
           // Handle other state changes as needed
@@ -1850,6 +1889,23 @@ export default function HomePage() {
     }
   };
 
+  const selectProject = async (projectId) => {
+    try {
+      // Save active project state to backend
+      await workspaceStateService.updateActiveProject(projectId);
+      
+      // If this project has pages, select the first page
+      const project = projects.find(p => p.id === projectId);
+      if (project && project.pages && project.pages.length > 0) {
+        const firstPage = project.pages[0];
+        await selectPage(projectId, firstPage.id);
+      }
+    } catch (error) {
+      console.error('❌ Failed to save active project:', error);
+      // Don't show error to user as this is background save
+    }
+  };
+
   const handleProjectContextMenu = (e, projectId) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2614,8 +2670,24 @@ export default function HomePage() {
     }
   };
 
-  const selectPage = (projectId, pageId) => {
+  const selectPage = async (projectId, pageId) => {
     setSelectedPage({ projectId, pageId });
+    
+    // Save active project state first (since we're selecting a page within this project)
+    try {
+      await workspaceStateService.updateActiveProject(projectId);
+    } catch (error) {
+      console.error('❌ Failed to save active project:', error);
+      // Don't show error to user as this is background save
+    }
+    
+    // Save active page state to backend
+    try {
+      await workspaceStateService.updateActivePage(pageId);
+    } catch (error) {
+      console.error('❌ Failed to save active page:', error);
+      // Don't show error to user as this is background save
+    }
     
     // Auto-switch to the first tab only if no active tab exists on the page
     setTimeout(() => {
@@ -3819,7 +3891,8 @@ export default function HomePage() {
                     }}
                     onClick={() => {
                       if (!isDraggingProject) {
-                        toggleProjectExpansion(project.id);
+                        // Only select the project, don't toggle expansion
+                        selectProject(project.id);
                       }
                     }}
                     onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
@@ -3838,10 +3911,14 @@ export default function HomePage() {
                       {project.pages && project.pages.length > 0 && (
                         <svg 
                           style={{ width: '12px', height: '12px' }} 
-                          className={`text-gray-500 mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0`} 
+                          className={`text-gray-500 mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0 cursor-pointer hover:text-gray-700`} 
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleProjectExpansion(project.id);
+                          }}
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>

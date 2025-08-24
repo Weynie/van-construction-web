@@ -27,4 +27,7 @@ public interface PageRepository extends JpaRepository<Page, UUID> {
     
     @Query("SELECT p FROM Page p JOIN p.project pr WHERE pr.userId = :userId")
     List<Page> findAllByUserId(@Param("userId") Long userId);
+    
+    @Query("SELECT p FROM Page p WHERE p.projectId = :projectId AND p.isActive = true")
+    Page findByProjectIdAndIsActiveTrue(@Param("projectId") UUID projectId);
 } 

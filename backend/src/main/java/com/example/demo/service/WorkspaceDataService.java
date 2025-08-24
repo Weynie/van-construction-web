@@ -569,5 +569,108 @@ public class WorkspaceDataService {
         // No default projects created, promoting user engagement and learning
     }
     
+    // ==================== ACTIVE STATE MANAGEMENT ====================
+    
+    /**
+     * Update active project for a user
+     */
+    public void updateActiveProject(UUID projectId, Long userId) {
+        Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new RuntimeException("Project not found"));
+            
+        if (!project.getUserId().equals(userId)) {
+            throw new RuntimeException("Unauthorized access to project");
+        }
+        
+        // Deactivate all other projects for this user
+        List<Project> userProjects = projectRepository.findByUserIdOrderByDisplayOrderAsc(userId);
+        for (Project p : userProjects) {
+            if (p.getIsActive()) {
+                p.setIsActive(false);
+                projectRepository.save(p);
+            }
+        }
+        
+        // Activate the selected project
+        project.setIsActive(true);
+        projectRepository.save(project);
+    }
+    
+    /**
+     * Update active page within a project
+     */
+    public void updateActivePage(UUID pageId, Long userId) {
+        Page page = pageRepository.findById(pageId)
+            .orElseThrow(() -> new RuntimeException("Page not found"));
+            
+        // Verify page belongs to user's project
+        Project project = projectRepository.findById(page.getProjectId())
+            .orElseThrow(() -> new RuntimeException("Project not found"));
+            
+        if (!project.getUserId().equals(userId)) {
+            throw new RuntimeException("Unauthorized access to page");
+        }
+        
+        // Deactivate all other pages in this project
+        List<Page> projectPages = pageRepository.findByProjectIdOrderByDisplayOrderAsc(page.getProjectId());
+        for (Page p : projectPages) {
+            if (p.getIsActive()) {
+                p.setIsActive(false);
+                pageRepository.save(p);
+            }
+        }
+        
+        // Activate the selected page
+        page.setIsActive(true);
+        pageRepository.save(page);
+    }
+    
+    /**
+     * Get the last active state for a user (project, page, tab)
+     */
+    public Map<String, Object> getLastActiveState(Long userId) {
+        Map<String, Object> activeState = new HashMap<>();
+        
+        // Find active project
+        Project activeProject = projectRepository.findByUserIdAndIsActiveTrue(userId);
+        if (activeProject != null) {
+            activeState.put("activeProjectId", activeProject.getId());
+            
+            // Find active page within the active project
+            Page activePage = pageRepository.findByProjectIdAndIsActiveTrue(activeProject.getId());
+            if (activePage != null) {
+                activeState.put("activePageId", activePage.getId());
+                
+                // Find active tab within the active page
+                List<Tab> activeTabs = tabRepository.findActiveTabsByPageId(activePage.getId());
+                Tab activeTab = activeTabs.isEmpty() ? null : activeTabs.get(0);
+                if (activeTab != null) {
+                    activeState.put("activeTabId", activeTab.getId());
+                }
+            }
+        }
+        
+        return activeState;
+    }
+    
+    /**
+     * Set the first project as active if no active project exists
+     */
+    public void setDefaultActiveState(Long userId) {
+        List<Project> projects = projectRepository.findByUserIdOrderByDisplayOrderAsc(userId);
+        if (!projects.isEmpty()) {
+            Project firstProject = projects.get(0);
+            if (!firstProject.getIsActive()) {
+                updateActiveProject(firstProject.getId(), userId);
+                
+                // Set first page as active
+                List<Page> pages = pageRepository.findByProjectIdOrderByDisplayOrderAsc(firstProject.getId());
+                if (!pages.isEmpty()) {
+                    Page firstPage = pages.get(0);
+                    updateActivePage(firstPage.getId(), userId);
+                }
+            }
+        }
+    }
 
 } 

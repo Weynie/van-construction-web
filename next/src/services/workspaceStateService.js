@@ -731,5 +731,83 @@ export const workspaceStateService = {
       
       return false;
     }
+  },
+
+  // ==================== ACTIVE STATE MANAGEMENT ====================
+
+  /**
+   * Update active project and persist to backend
+   */
+  async updateActiveProject(projectId) {
+    try {
+      await workspaceApiService.updateActiveProject(projectId);
+    } catch (error) {
+      console.error('Error updating active project:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update active page and persist to backend
+   */
+  async updateActivePage(pageId) {
+    try {
+      await workspaceApiService.updateActivePage(pageId);
+    } catch (error) {
+      console.error('Error updating active page:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get last active state from backend
+   */
+  async getLastActiveState() {
+    try {
+      const activeState = await workspaceApiService.getLastActiveState();
+      return activeState;
+    } catch (error) {
+      console.error('Error getting last active state:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Restore active state from backend data
+   */
+  async restoreActiveState(workspaceData) {
+    try {
+      const activeState = await this.getLastActiveState();
+      
+      // Find active project, page, and tab from workspace data
+      let activeProject = null;
+      let activePage = null;
+      let activeTab = null;
+      
+      if (activeState.activeProjectId && workspaceData.projects) {
+        activeProject = workspaceData.projects.find(p => p.id === activeState.activeProjectId);
+        
+        if (activeProject && activeState.activePageId && activeProject.pages) {
+          activePage = activeProject.pages.find(p => p.id === activeState.activePageId);
+          
+          if (activePage && activeState.activeTabId && activePage.tabs) {
+            activeTab = activePage.tabs.find(t => t.id === activeState.activeTabId);
+          }
+        }
+      }
+      
+      const restoredState = {
+        activeProject,
+        activePage,
+        activeTab,
+        activeState
+      };
+      
+      return restoredState;
+    } catch (error) {
+      console.error('Error restoring active state:', error);
+      throw error;
+    }
   }
+
 }; 
