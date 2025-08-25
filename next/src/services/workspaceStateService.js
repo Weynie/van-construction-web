@@ -82,14 +82,14 @@ export const workspaceStateService = {
   /**
    * Load complete workspace data and initialize state
    */
-  async loadWorkspaceData() {
+  async loadWorkspaceData(userPassword = null) {
     try {
       this.notifyListeners({ type: 'LOADING_WORKSPACE' });
       
       const workspaceData = await workspaceApiService.getAllWorkspaceData();
       
-      // Process and merge tab data with templates
-      const processedData = await this.processWorkspaceData(workspaceData);
+      // Process and merge tab data with templates, including automatic decryption
+      const processedData = await this.processWorkspaceData(workspaceData, userPassword);
       
       this.notifyListeners({
         type: 'WORKSPACE_LOADED',
@@ -110,7 +110,7 @@ export const workspaceStateService = {
   /**
    * Process workspace data and merge templates with delta data
    */
-  async processWorkspaceData(workspaceData) {
+  async processWorkspaceData(workspaceData, userPassword = null) {
     const { projects } = workspaceData;
     
     console.log('🏗️ Processing workspace data...', workspaceData);
@@ -133,20 +133,69 @@ export const workspaceStateService = {
                 console.log(`🏷️ Processing tab ${projectIndex}-${pageIndex}-${tabIndex}: ${tab.name} (${tab.tabType || tab.type})`);
                 
                 try {
-                  // Merge tab data with template
-                  const mergedData = await this.mergeTabDataWithTemplate(tab);
-                  console.log(`✅ Successfully processed tab ${tab.name}`);
+                  // Check if tab has encrypted data first
+                  const tabDataResponse = await workspaceApiService.getTabData(tab.id);
                   
-                  return {
-                    ...tab,
-                    locked: tab.isLocked, // Map backend isLocked to frontend locked for UI compatibility
-                    mergedData
-                  };
+                  if (tabDataResponse && tabDataResponse.isEncrypted) {
+                    console.log(`🔒 Tab ${tab.name} has encrypted data, attempting automatic decryption`);
+                    
+                    if (userPassword) {
+                      try {
+                        // Use encrypted merge method with provided password
+                        const mergedData = await this.mergeTabDataWithTemplateEncrypted(tab, userPassword);
+                        console.log(`✅ Successfully decrypted and processed tab ${tab.name}`);
+                        
+                        return {
+                          ...tab,
+                          locked: tab.isLocked,
+                          mergedData: mergedData.mergedData,
+                          isEncrypted: true,
+                          needsPassword: false
+                        };
+                      } catch (decryptError) {
+                        console.warn(`❌ Failed to decrypt tab ${tab.name}:`, decryptError.message);
+                        // Fall back to template defaults if decryption fails
+                        const templateData = tabTemplateService.getTemplate(tab.tabType || tab.type);
+                        return {
+                          ...tab,
+                          locked: tab.isLocked,
+                          mergedData: templateData,
+                          isEncrypted: true,
+                          needsPassword: true
+                        };
+                      }
+                    } else {
+                      console.log(`🔒 Tab ${tab.name} is encrypted but no password provided`);
+                      // Return template defaults if no password available
+                      const templateData = tabTemplateService.getTemplate(tab.tabType || tab.type);
+                      return {
+                        ...tab,
+                        locked: tab.isLocked,
+                        mergedData: templateData,
+                        isEncrypted: true,
+                        needsPassword: true
+                      };
+                    }
+                  } else {
+                    // Regular unencrypted data processing
+                    const mergedData = await this.mergeTabDataWithTemplate(tab);
+                    console.log(`✅ Successfully processed tab ${tab.name}`);
+                    
+                    return {
+                      ...tab,
+                      locked: tab.isLocked,
+                      mergedData,
+                      isEncrypted: false,
+                      needsPassword: false
+                    };
+                  }
                 } catch (error) {
                   console.error(`❌ Error processing tab ${tab.name}:`, error);
                   return {
                     ...tab,
-                    mergedData: null
+                    mergedData: null,
+                    isEncrypted: false,
+                    needsPassword: false
                   };
                 }
               })
@@ -193,6 +242,60 @@ export const workspaceStateService = {
       console.error(`❌ Error merging tab data for tab ${tab.id}:`, error);
       // Return template defaults if merge fails
       return tabTemplateService.getTemplate(tab.tabType);
+    }
+  },
+
+  /**
+   * Enhanced merge method that can handle encrypted data with password
+   */
+  async mergeTabDataWithTemplateEncrypted(tab, userPassword = null) {
+    try {
+      console.log(`🔐 Merging tab data (with encryption support) for: ${tab.name} (${tab.tabType})`);
+      
+      // Get delta data from backend - first try regular method
+      let tabDataResponse = await workspaceApiService.getTabData(tab.id);
+      let deltaData = tabDataResponse.data;
+      
+      // Check if data is encrypted
+      if (tabDataResponse.isEncrypted && userPassword) {
+        console.log(`🔓 Tab data is encrypted, attempting decryption...`);
+        try {
+          // Get decrypted data for merging
+          const decryptedResponse = await workspaceApiService.getTabDataForMerging(tab.id, userPassword);
+          deltaData = decryptedResponse.data || {};
+          console.log(`✅ Successfully decrypted data for ${tab.name}`);
+        } catch (error) {
+          console.warn(`❌ Failed to decrypt data for ${tab.name}:`, error.message);
+          // Fall back to template defaults if decryption fails
+          deltaData = {};
+        }
+      } else if (tabDataResponse.isEncrypted && !userPassword) {
+        console.log(`🔒 Tab data is encrypted but no password provided, using template defaults`);
+        deltaData = {};
+      } else {
+        deltaData = deltaData || {};
+      }
+      
+      console.log(`📄 Delta data for ${tab.name}:`, deltaData);
+      
+      // Merge with template
+      const mergedData = tabTemplateService.mergeWithTemplate(tab.tabType, deltaData);
+      
+      console.log(`✅ Merged data for ${tab.name}:`, mergedData);
+      
+      return {
+        mergedData,
+        isEncrypted: tabDataResponse.isEncrypted || false,
+        needsPassword: tabDataResponse.isEncrypted && !userPassword
+      };
+    } catch (error) {
+      console.error(`❌ Error merging tab data for tab ${tab.id}:`, error);
+      // Return template defaults if merge fails
+      return {
+        mergedData: tabTemplateService.getTemplate(tab.tabType),
+        isEncrypted: false,
+        needsPassword: false
+      };
     }
   },
 
@@ -640,8 +743,9 @@ export const workspaceStateService = {
   async updateTabData(tabId, tabType, newData) {
     const realId = this.getRealId(tabId);
     
-    // Extract delta from template
-    const deltaData = tabTemplateService.extractDelta(tabType, newData);
+    // For incremental updates, newData is already the delta (only changed fields)
+    // No need to extract delta again - frontend sends only what changed
+    const deltaData = newData;
     
     // Optimistic update
     this.notifyListeners({
@@ -662,13 +766,7 @@ export const workspaceStateService = {
   async saveTabDataImmediately(tabId, tabType, data) {
     const realId = this.getRealId(tabId);
     
-    // Debug: log the input data
-    console.log('🔍 saveTabDataImmediately input data:', data);
-    
     const deltaData = tabTemplateService.extractDelta(tabType, data);
-    
-    // Debug: log the extracted delta
-    console.log('🔍 saveTabDataImmediately extracted delta:', deltaData);
     
     try {
       await workspaceApiService.updateTabData(realId, deltaData);
@@ -676,6 +774,122 @@ export const workspaceStateService = {
       this.notifyListeners({
         type: 'TAB_DATA_SAVED',
         tabId: realId
+      });
+    } catch (error) {
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVE_FAILED',
+        tabId: realId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  // ==================== ENCRYPTED TAB DATA OPERATIONS ====================
+
+  /**
+   * Update tab data with encryption
+   */
+  async updateTabDataEncrypted(tabId, tabType, newData, userPassword) {
+    const realId = this.getRealId(tabId);
+    
+    // For incremental updates, newData is already the delta (only changed fields)
+    // No need to extract delta again - frontend sends only what changed
+    const deltaData = newData;
+    
+    // Optimistic update
+    this.notifyListeners({
+      type: 'TAB_DATA_UPDATED_OPTIMISTIC',
+      tabId: realId,
+      data: newData
+    });
+
+    try {
+      await workspaceApiService.updateTabDataEncrypted(realId, deltaData, userPassword);
+      
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVED',
+        tabId: realId
+      });
+    } catch (error) {
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVE_FAILED',
+        tabId: realId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Save tab data with encryption immediately
+   */
+  async saveTabDataEncryptedImmediately(tabId, tabType, data, userPassword) {
+    const realId = this.getRealId(tabId);
+    
+    console.log('🔍 saveTabDataEncryptedImmediately input data:', data);
+    
+    const deltaData = tabTemplateService.extractDelta(tabType, data);
+    
+    console.log('🔍 saveTabDataEncryptedImmediately extracted delta:', deltaData);
+    
+    try {
+      await workspaceApiService.updateTabDataEncrypted(realId, deltaData, userPassword);
+      
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVED',
+        tabId: realId
+      });
+    } catch (error) {
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVE_FAILED',
+        tabId: realId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Get tab data with decryption for merging
+   */
+  async getTabDataForMerging(tabId, userPassword) {
+    const realId = this.getRealId(tabId);
+    
+    try {
+      const tabData = await workspaceApiService.getTabDataForMerging(realId, userPassword);
+      return tabData;
+    } catch (error) {
+      console.error('Error getting decrypted tab data:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Validate user password
+   */
+  async validateUserPassword(userPassword) {
+    try {
+      return await workspaceApiService.validateUserPassword(userPassword);
+    } catch (error) {
+      console.error('Error validating password:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Replace tab data with encryption
+   */
+  async replaceTabDataEncrypted(tabId, newData, userPassword) {
+    const realId = this.getRealId(tabId);
+    
+    try {
+      await workspaceApiService.replaceTabDataEncrypted(realId, newData, userPassword);
+      
+      this.notifyListeners({
+        type: 'TAB_DATA_REPLACED',
+        tabId: realId,
+        data: newData
       });
     } catch (error) {
       this.notifyListeners({

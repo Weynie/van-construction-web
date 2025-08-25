@@ -474,6 +474,115 @@ public class WorkspaceController {
         }
     }
     
+    // ==================== ENCRYPTED TAB DATA OPERATIONS ====================
+    
+    @GetMapping("/tabs/{tabId}/data/decrypt")
+    public ResponseEntity<?> getTabDataForMerging(HttpServletRequest request, 
+                                                  @PathVariable UUID tabId,
+                                                  @RequestParam String userPassword) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            TabData tabData = workspaceDataService.getTabDataForMerging(tabId, userId, userPassword);
+            return ResponseEntity.ok(tabData);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @PutMapping("/tabs/{tabId}/data/replace/encrypted")
+    public ResponseEntity<?> replaceTabDataEncrypted(HttpServletRequest request,
+                                                     @PathVariable UUID tabId,
+                                                     @RequestBody Map<String, Object> requestBody) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> newData = (Map<String, Object>) requestBody.getOrDefault("data", new HashMap<>());
+            String userPassword = (String) requestBody.get("userPassword");
+            
+            if (userPassword == null || userPassword.isEmpty()) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "User password is required for encryption"));
+            }
+            
+            TabData updatedData = workspaceDataService.replaceTabDataEncrypted(tabId, userId, newData, userPassword);
+            return ResponseEntity.ok(updatedData);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @PutMapping("/tabs/{tabId}/data/encrypted")
+    public ResponseEntity<?> updateTabDataEncrypted(HttpServletRequest request, 
+                                                   @PathVariable UUID tabId, 
+                                                   @RequestBody Map<String, Object> payload) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> deltaData = (Map<String, Object>) payload.get("data");
+            String userPassword = (String) payload.get("userPassword");
+            
+            if (deltaData == null) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Delta data is required"));
+            }
+            
+            if (userPassword == null || userPassword.isEmpty()) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "User password is required for encryption"));
+            }
+            
+            TabData tabData = workspaceDataService.updateTabDataEncrypted(tabId, userId, deltaData, userPassword);
+            return ResponseEntity.ok(tabData);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/validate-password")
+    public ResponseEntity<?> validateUserPassword(HttpServletRequest request, 
+                                                  @RequestBody Map<String, Object> payload) {
+        try {
+            Long userId = getUserIdFromRequest(request);
+            String userPassword = (String) payload.get("userPassword");
+            
+            if (userPassword == null || userPassword.isEmpty()) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "User password is required"));
+            }
+            
+            // Find user and validate password
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            boolean isValid = workspaceDataService.validateUserPassword(userId, userPassword);
+            
+            return ResponseEntity.ok(Map.of(
+                "valid", isValid,
+                "message", isValid ? "Password validated successfully" : "Invalid password"
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
     // ==================== ACTIVE STATE MANAGEMENT ====================
     
     @PutMapping("/projects/{projectId}/active")

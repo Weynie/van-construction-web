@@ -438,6 +438,80 @@ export const workspaceApiService = {
     }
   },
 
+  // ==================== ENCRYPTED TAB DATA OPERATIONS ====================
+
+  /**
+   * Validate user password for encryption operations
+   */
+  async validateUserPassword(userPassword) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/validate-password`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ userPassword }),
+      });
+      
+      const result = await this.handleResponse(response);
+      return result.valid;
+    } catch (error) {
+      console.error('Error validating user password:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get tab data with decryption for merging
+   */
+  async getTabDataForMerging(tabId, userPassword) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/tabs/${tabId}/data/decrypt?userPassword=${encodeURIComponent(userPassword)}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Error fetching decrypted tab data:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update tab data with encryption (delta update)
+   */
+  async updateTabDataEncrypted(tabId, deltaData, userPassword) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/tabs/${tabId}/data/encrypted`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ data: deltaData, userPassword }),
+      });
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Error updating encrypted tab data:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Replace tab data with encryption
+   */
+  async replaceTabDataEncrypted(tabId, newData, userPassword) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/workspace/tabs/${tabId}/data/replace/encrypted`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ data: newData, userPassword }),
+      });
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Error replacing encrypted tab data:', error);
+      throw error;
+    }
+  },
+
   /**
    * Update only the active status of a tab (lightweight operation)
    */

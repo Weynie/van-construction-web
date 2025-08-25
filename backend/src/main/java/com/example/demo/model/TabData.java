@@ -24,6 +24,16 @@ public class TabData {
     @Column(name = "data", columnDefinition = "jsonb")
     private Map<String, Object> data;
     
+    // Encryption support fields
+    @Column(name = "encrypted_data", columnDefinition = "text")
+    private String encryptedData;
+    
+    @Column(name = "data_salt")
+    private String dataSalt;
+    
+    @Column(name = "is_encrypted", nullable = false)
+    private Boolean isEncrypted = false;
+    
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     

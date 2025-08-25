@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,15 @@ public class WorkspaceDataService {
     
     @Autowired
     private TabDataRepository tabDataRepository;
+    
+    @Autowired
+    private TabDataEncryptionService tabDataEncryptionService;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     // ==================== PROJECT OPERATIONS ====================
     
@@ -475,19 +485,118 @@ public class WorkspaceDataService {
 
     // ==================== TAB DATA OPERATIONS ====================
     
+    /**
+     * Get tab data with optional decryption for merging purposes
+     */
+    public TabData getTabDataForMerging(UUID tabId, Long userId, String userPassword) {
+        Tab tab = tabRepository.findById(tabId)
+            .orElseThrow(() -> new RuntimeException("Tab not found"));
+            
+        verifyTabOwnership(tab, userId);
+        
+        TabData tabData = tabDataRepository.findById(tabId)
+            .orElseGet(() -> {
+                TabData newData = new TabData();
+                newData.setTabId(tabId);
+                newData.setData(new HashMap<>());
+                newData.setIsEncrypted(false);
+                return tabDataRepository.save(newData);
+            });
+        
+        // If data is encrypted and password is provided, decrypt for merging
+        if (tabData.getIsEncrypted() && userPassword != null && !userPassword.isEmpty()) {
+            try {
+                // Verify user password first
+                User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+                
+                if (!passwordEncoder.matches(userPassword, user.getPassword())) {
+                    throw new RuntimeException("Invalid password for data decryption");
+                }
+                
+                // Decrypt the data for merging
+                Map<String, Object> decryptedData = tabDataEncryptionService.decryptTabData(
+                    tabData.getEncryptedData(), userPassword, tabData.getDataSalt());
+                
+                // Return a copy with decrypted data for merging (don't modify original)
+                TabData decryptedTabData = new TabData();
+                decryptedTabData.setTabId(tabData.getTabId());
+                decryptedTabData.setData(decryptedData);
+                decryptedTabData.setIsEncrypted(false); // Mark as decrypted for merging
+                decryptedTabData.setCreatedAt(tabData.getCreatedAt());
+                decryptedTabData.setUpdatedAt(tabData.getUpdatedAt());
+                
+                return decryptedTabData;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to decrypt tab data: " + e.getMessage());
+            }
+        }
+        
+        return tabData;
+    }
+    
+    /**
+     * Save tab data with encryption
+     */
+    public TabData saveTabDataEncrypted(UUID tabId, Long userId, Map<String, Object> newData, String userPassword) {
+        Tab tab = tabRepository.findById(tabId)
+            .orElseThrow(() -> new RuntimeException("Tab not found"));
+            
+        verifyTabOwnership(tab, userId);
+        
+        // Verify user password first
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!passwordEncoder.matches(userPassword, user.getPassword())) {
+            throw new RuntimeException("Invalid password for data encryption");
+        }
+        
+        TabData tabData = tabDataRepository.findById(tabId)
+            .orElseGet(() -> {
+                TabData newTabData = new TabData();
+                newTabData.setTabId(tabId);
+                return newTabData;
+            });
+        
+        try {
+            // Generate salt if not exists
+            if (tabData.getDataSalt() == null || tabData.getDataSalt().isEmpty()) {
+                tabData.setDataSalt(tabDataEncryptionService.generateSalt());
+            }
+            
+            // Encrypt the data
+            String encryptedData = tabDataEncryptionService.encryptTabData(newData, userPassword, tabData.getDataSalt());
+            
+            // Store encrypted data
+            tabData.setEncryptedData(encryptedData);
+            tabData.setIsEncrypted(true);
+            tabData.setData(null); // Clear unencrypted data
+            
+            return tabDataRepository.save(tabData);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to encrypt tab data: " + e.getMessage());
+        }
+    }
+    
     public TabData getTabData(UUID tabId, Long userId) {
         Tab tab = tabRepository.findById(tabId)
             .orElseThrow(() -> new RuntimeException("Tab not found"));
             
         verifyTabOwnership(tab, userId);
         
-        return tabDataRepository.findById(tabId)
+        TabData tabData = tabDataRepository.findById(tabId)
             .orElseGet(() -> {
                 TabData newData = new TabData();
                 newData.setTabId(tabId);
                 newData.setData(new HashMap<>());
+                newData.setIsEncrypted(false);
                 return tabDataRepository.save(newData);
             });
+        
+        // Return data as-is for backward compatibility
+        // For encrypted data, frontend will need to call getTabDataForMerging with password
+        return tabData;
     }
     
     public TabData replaceTabData(UUID tabId, Long userId, Map<String, Object> newData) {
@@ -500,13 +609,29 @@ public class WorkspaceDataService {
             .orElseGet(() -> {
                 TabData newTabData = new TabData();
                 newTabData.setTabId(tabId);
+                newTabData.setIsEncrypted(false);
                 return newTabData;
             });
         
-        // Completely replace data instead of merging
-        tabData.setData(newData);
+        // For backward compatibility - store unencrypted if not already encrypted
+        if (!tabData.getIsEncrypted()) {
+            tabData.setData(newData);
+            tabData.setEncryptedData(null);
+            tabData.setDataSalt(null);
+        } else {
+            // If data was encrypted, it should remain encrypted
+            // This method should not be used for encrypted data without password
+            throw new RuntimeException("Cannot update encrypted data without password. Use encrypted methods.");
+        }
         
         return tabDataRepository.save(tabData);
+    }
+    
+    /**
+     * Replace tab data with encryption
+     */
+    public TabData replaceTabDataEncrypted(UUID tabId, Long userId, Map<String, Object> newData, String userPassword) {
+        return saveTabDataEncrypted(tabId, userId, newData, userPassword);
     }
 
     public TabData updateTabData(UUID tabId, Long userId, Map<String, Object> deltaData) {
@@ -520,21 +645,127 @@ public class WorkspaceDataService {
                 TabData newData = new TabData();
                 newData.setTabId(tabId);
                 newData.setData(new HashMap<>());
+                newData.setIsEncrypted(false);
                 return newData;
             });
         
-        // Merge delta data
-        Map<String, Object> currentData = tabData.getData();
-        if (currentData == null) {
-            currentData = new HashMap<>();
+        // For backward compatibility - only update unencrypted data
+        if (!tabData.getIsEncrypted()) {
+            // Deep merge delta data with existing data
+            Map<String, Object> currentData = tabData.getData();
+            if (currentData == null) {
+                currentData = new HashMap<>();
+            }
+            
+            Map<String, Object> mergedData = deepMerge(currentData, deltaData);
+            tabData.setData(mergedData);
+            
+            return tabDataRepository.save(tabData);
+        } else {
+            // If data is encrypted, require password for updates
+            throw new RuntimeException("Cannot update encrypted data without password. Use encrypted methods.");
+        }
+    }
+    
+    /**
+     * Update tab data with encryption - merges delta data with existing encrypted data
+     */
+    public TabData updateTabDataEncrypted(UUID tabId, Long userId, Map<String, Object> deltaData, String userPassword) {
+        Tab tab = tabRepository.findById(tabId)
+            .orElseThrow(() -> new RuntimeException("Tab not found"));
+            
+        verifyTabOwnership(tab, userId);
+        
+        // Verify user password first
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!passwordEncoder.matches(userPassword, user.getPassword())) {
+            throw new RuntimeException("Invalid password for data encryption");
         }
         
-        currentData.putAll(deltaData);
-        tabData.setData(currentData);
+        TabData tabData = tabDataRepository.findById(tabId)
+            .orElseGet(() -> {
+                TabData newData = new TabData();
+                newData.setTabId(tabId);
+                newData.setIsEncrypted(true);
+                newData.setDataSalt(tabDataEncryptionService.generateSalt());
+                return newData;
+            });
         
-        return tabDataRepository.save(tabData);
+        try {
+            Map<String, Object> currentData = new HashMap<>();
+            
+            // If data exists and is encrypted, decrypt it first
+            if (tabData.getIsEncrypted() && tabData.getEncryptedData() != null) {
+                currentData = tabDataEncryptionService.decryptTabData(
+                    tabData.getEncryptedData(), userPassword, tabData.getDataSalt());
+            } else if (!tabData.getIsEncrypted() && tabData.getData() != null) {
+                // Migrating from unencrypted to encrypted
+                currentData = new HashMap<>(tabData.getData());
+                if (tabData.getDataSalt() == null) {
+                    tabData.setDataSalt(tabDataEncryptionService.generateSalt());
+                }
+            }
+            
+            // Deep merge delta data with existing data
+            if (currentData == null) {
+                currentData = new HashMap<>();
+            }
+            currentData = deepMerge(currentData, deltaData);
+            
+            // Encrypt and save
+            String encryptedData = tabDataEncryptionService.encryptTabData(currentData, userPassword, tabData.getDataSalt());
+            
+            tabData.setEncryptedData(encryptedData);
+            tabData.setIsEncrypted(true);
+            tabData.setData(null); // Clear unencrypted data
+            
+            return tabDataRepository.save(tabData);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update encrypted tab data: " + e.getMessage());
+        }
     }
 
+    /**
+     * Validate user password for encryption operations
+     */
+    public boolean validateUserPassword(Long userId, String userPassword) {
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            return passwordEncoder.matches(userPassword, user.getPassword());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Deep merge two maps - recursively merges nested maps
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> deepMerge(Map<String, Object> target, Map<String, Object> source) {
+        Map<String, Object> result = new HashMap<>(target);
+        
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            String key = entry.getKey();
+            Object sourceValue = entry.getValue();
+            
+            if (sourceValue instanceof Map && result.get(key) instanceof Map) {
+                // Both are maps, recursively merge them
+                Map<String, Object> targetMap = (Map<String, Object>) result.get(key);
+                Map<String, Object> sourceMap = (Map<String, Object>) sourceValue;
+                result.put(key, deepMerge(targetMap, sourceMap));
+            } else {
+                // Replace or add the value
+                result.put(key, sourceValue);
+            }
+        }
+        
+        return result;
+    }
+    
     // ==================== WORKSPACE OPERATIONS ====================
     
     public Map<String, Object> getAllWorkspaceData(Long userId) {

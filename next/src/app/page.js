@@ -78,6 +78,17 @@ export default function HomePage() {
 
   // Add state for seismic template fields per tab
   const [seismicTabData, setSeismicTabData] = useState({});
+  
+  // Encryption state - always enabled for authenticated users
+  const [encryptionEnabled, setEncryptionEnabled] = useState(true);
+  const [encryptionLoading, setEncryptionLoading] = useState(false);
+  const [userPassword, setUserPassword] = useState(''); // Store user's login password for automatic encryption
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordPromptCallback, setPasswordPromptCallback] = useState(null);
+  
+  // State to track current tab type for dropdown (prevents flickering)
+  const [currentTabType, setCurrentTabType] = useState('');
+  const debounceTimeoutRef = useRef(null);
 
   // Add state for sediment types data
   const [sedimentTypes, setSedimentTypes] = useState([]);
@@ -136,13 +147,20 @@ export default function HomePage() {
           setIsAuthenticated(true);
           setUserId(userId);
           
+          // Restore password from sessionStorage if available
+          const storedPassword = sessionStorage.getItem('userPassword');
+                  if (storedPassword) {
+          setUserPassword(storedPassword);
+        }
+          
           // Fetch user profile data
           try {
             const profile = await userService.getUserProfile(userId);
             setUsername(profile.username);
             
             // Initialize workspace after successful authentication
-            await initializeWorkspace();
+            // Pass the stored password directly to ensure it's available immediately
+            await initializeWorkspace(storedPassword);
           } catch (error) {
             console.error('Failed to fetch user profile:', error);
             // If profile fetch fails, user might not be authenticated anymore
@@ -160,27 +178,94 @@ export default function HomePage() {
     checkAuthentication();
   }, []);
 
+  // Update current tab type when active tab changes (prevents dropdown flickering)
+  useEffect(() => {
+    // Clear any pending timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    
+    // Debounce the update to prevent rapid changes
+    debounceTimeoutRef.current = setTimeout(() => {
+      const currentProject = projects.find(p => p.id === selectedPage.projectId);
+      const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
+      
+      if (!currentPage || !currentPage.tabs || currentPage.tabs.length === 0) {
+        setCurrentTabType('');
+        return;
+      }
+      
+      // Use the SAME logic as the tab name display to prevent mismatches
+      const activeTab = findActiveTabOrWelcome(currentPage.tabs);
+      
+      if (activeTab) {
+        const tabType = activeTab.type || activeTab.tabType;
+        
+        if (tabType === 'Welcome' || tabType === 'welcome') {
+          setCurrentTabType('');
+        } else {
+          const displayName = mapTabTypeToDisplayName(tabType) || '';
+          if (displayName !== currentTabType) {
+            setCurrentTabType(displayName);
+          }
+        }
+      } else {
+        // No tab found, use blank for stability
+        setCurrentTabType('');
+      }
+    }, 50); // Reduced debounce for better responsiveness
+    
+    // Cleanup function
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [projects, selectedPage.projectId, selectedPage.pageId]);
+
   // Initialize workspace data
-  const initializeWorkspace = async () => {
+  const initializeWorkspace = async (providedPassword = null) => {
     try {
-      console.log('🚀 Starting workspace initialization...');
       setWorkspaceLoading(true);
       setWorkspaceError(null);
       
-      const workspaceData = await workspaceStateService.loadWorkspaceData();
-      console.log('📊 Loaded workspace data:', workspaceData);
+      const passwordToUse = providedPassword || userPassword;
+      
+      const workspaceData = await workspaceStateService.loadWorkspaceData(passwordToUse);
+      
+      // Check if any tabs need password for decryption
+      const needsPassword = workspaceData.projects?.some(project =>
+        project.pages?.some(page =>
+          page.tabs?.some(tab => tab.needsPassword)
+        )
+      );
+      
+      if (needsPassword && !passwordToUse) {
+
+        setShowPasswordPrompt(true);
+        setPasswordPromptCallback(() => async (enteredPassword) => {
+          setUserPassword(enteredPassword);
+          // Store in sessionStorage for future page refreshes
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            sessionStorage.setItem('userPassword', enteredPassword);
+          }
+          setShowPasswordPrompt(false);
+
+          // Retry workspace initialization with the provided password
+          await initializeWorkspace(enteredPassword);
+        });
+        setWorkspaceLoading(false);
+        return;
+      }
       
       if (workspaceData.projects && workspaceData.projects.length > 0) {
-        console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
         setProjects(workspaceData.projects);
         
         // Try to restore the last active state
         try {
           const restoredState = await workspaceStateService.restoreActiveState(workspaceData);
-          console.log('🔄 Restored active state:', restoredState);
           
           if (restoredState.activeProject && restoredState.activePage) {
-            console.log('✅ Restoring last active project and page');
             
             // Update the projects array with the restored expansion state
             const updatedProjects = workspaceData.projects.map(project => {
@@ -200,7 +285,7 @@ export default function HomePage() {
               pageId: restoredState.activePage.id 
             });
           } else {
-            console.log('📝 No active state found, using first project and page');
+
             // Fallback to first project and page
             const firstProject = workspaceData.projects[0];
             if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
@@ -1037,10 +1122,13 @@ export default function HomePage() {
         const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         console.log('✅ New tab created in target location:', movedTab.id);
         
-        // Step 4: Restore the original data to the new tab
+        // Step 4: Restore the original data to the new tab (only delta data)
         if (tabData && tabData.mergedData) {
-          await workspaceApiService.replaceTabData(movedTab.id, tabData.mergedData);
-          console.log('✅ Original data restored to new tab');
+          const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
+          if (Object.keys(deltaData).length > 0) {
+            await workspaceApiService.replaceTabData(movedTab.id, deltaData);
+            console.log('✅ Original delta data restored to new tab');
+          }
         }
         
         // Step 5: Update local state with moved tab
@@ -1087,9 +1175,12 @@ export default function HomePage() {
         const position = targetPage?.tabs?.length || 0;
         const createdTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         
-        // Copy the tab data if it exists in the clipboard
+        // Copy the tab data if it exists in the clipboard (only delta data)
         if (tabData && tabData.mergedData) {
-          await workspaceApiService.replaceTabData(createdTab.id, tabData.mergedData);
+          const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
+          if (Object.keys(deltaData).length > 0) {
+            await workspaceApiService.replaceTabData(createdTab.id, deltaData);
+          }
         }
         
         // Update local state with the new tab
@@ -1221,10 +1312,13 @@ export default function HomePage() {
         const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         console.log('✅ New tab created in target location:', movedTab.id);
         
-        // Step 4: Restore the original data to the new tab
+        // Step 4: Restore the original data to the new tab (only delta data)
         if (tabData && tabData.mergedData) {
-          await workspaceApiService.replaceTabData(movedTab.id, tabData.mergedData);
-          console.log('✅ Original data restored to new tab');
+          const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
+          if (Object.keys(deltaData).length > 0) {
+            await workspaceApiService.replaceTabData(movedTab.id, deltaData);
+            console.log('✅ Original delta data restored to new tab');
+          }
         }
         
         // Update local state with moved tab in correct position
@@ -1277,9 +1371,12 @@ export default function HomePage() {
         const position = targetTabIndex + 1;
         const createdTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         
-        // Copy the tab data if it exists in the clipboard
+        // Copy the tab data if it exists in the clipboard (only delta data)
         if (tabData && tabData.mergedData) {
-          await workspaceApiService.replaceTabData(createdTab.id, tabData.mergedData);
+          const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
+          if (Object.keys(deltaData).length > 0) {
+            await workspaceApiService.replaceTabData(createdTab.id, deltaData);
+          }
                 }
                 
       // Update local state with the new tab
@@ -1454,7 +1551,7 @@ export default function HomePage() {
     }
   }, [isAuthenticated, userId]);
 
-  // TODO: Active tab persistence - temporarily disabled to prevent data loss
+      // Active tab persistence
   // Will implement a different approach that doesn't interfere with mergedData
 
   // Fetch sediment types when seismic tab with results is loaded
@@ -1539,6 +1636,14 @@ export default function HomePage() {
           setIsAuthenticated(true);
           setUserId(data.userId);
           
+          // Store user's password for automatic encryption/decryption
+          setUserPassword(password);
+          // Also store in sessionStorage for persistence across page refreshes
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            sessionStorage.setItem('userPassword', password);
+          }
+          console.log('🔐 Password stored for automatic encryption (memory + session)');
+          
           // Fetch user profile to ensure we have the latest data
                   try {
           const profile = await userService.getUserProfile(data.userId);
@@ -1549,10 +1654,53 @@ export default function HomePage() {
             setUsername(data.username || username);
           }
           
-          // Initialize workspace after successful login
+          // Initialize workspace after successful login with automatic decryption
           try {
-            await initializeWorkspace();
-            console.log('✅ Workspace initialized after login');
+            const workspaceData = await workspaceStateService.loadWorkspaceData(password);
+            console.log('📊 Loaded workspace data with automatic decryption:', workspaceData);
+            
+            if (workspaceData.projects && workspaceData.projects.length > 0) {
+              console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
+              setProjects(workspaceData.projects);
+              
+              // Try to restore the last active state
+              try {
+                const restoredState = await workspaceStateService.restoreActiveState(workspaceData);
+                console.log('🔄 Restored active state:', restoredState);
+                
+                if (restoredState.activeProject && restoredState.activePage) {
+                  console.log('✅ Restoring last active project and page');
+                  
+                  // Update the projects array with the restored expansion state
+                  const updatedProjects = workspaceData.projects.map(project => {
+                    if (project.id === restoredState.activeProject.id) {
+                      return {
+                        ...project,
+                        isExpanded: restoredState.activeProject.isExpanded
+                      };
+                    }
+                    return project;
+                  });
+                  
+                  setProjects(updatedProjects);
+                  setSelectedPage({
+                    projectId: restoredState.activeProject.id,
+                    pageId: restoredState.activePage.id
+                  });
+                } else {
+                  console.log('🔄 No previous state, using first project/page');
+                  if (workspaceData.projects[0] && workspaceData.projects[0].pages && workspaceData.projects[0].pages[0]) {
+                    setSelectedPage({
+                      projectId: workspaceData.projects[0].id,
+                      pageId: workspaceData.projects[0].pages[0].id
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('❌ Failed to restore active state:', error);
+              }
+            }
+            console.log('✅ Workspace initialized after login with encryption');
           } catch (error) {
             console.error('❌ Failed to initialize workspace after login:', error);
             showToastNotification('Failed to load workspace: ' + error.message, 'error');
@@ -1604,11 +1752,17 @@ export default function HomePage() {
       localStorage.removeItem('token');
       localStorage.removeItem('userId');
     }
+    // Clear password from both memory and session storage
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.removeItem('userPassword');
+    }
     setIsAuthenticated(false);
     setUsername('');
     setUserId(null);
+    setUserPassword('');
     setHasStoredApiKey(false);
     setApiKeyStatus(null);
+    console.log('🔐 Password cleared from session on logout');
   };
 
   // Toast notification helper
@@ -2507,6 +2661,16 @@ export default function HomePage() {
             showToastNotification('Failed to close all tabs: ' + error.message, 'error');
           }
           break;
+        case 'closeThisTab':
+          // Close the current tab
+          try {
+            await closeTab(tabId);
+            console.log('✅ Tab closed successfully');
+          } catch (error) {
+            console.error('❌ Failed to close tab:', error);
+            showToastNotification('Failed to close tab: ' + error.message, 'error');
+          }
+          break;
       }
     }
     
@@ -2661,12 +2825,18 @@ export default function HomePage() {
     setProjects(updatedProjects);
     
     // Persist active status using lightweight API (doesn't affect mergedData)
-    try {
-      await workspaceApiService.updateActiveTab(tabId);
-      console.log('✅ Tab selected and active status saved:', tabId);
-    } catch (error) {
-      console.error('❌ Failed to save active tab status:', error);
-      // Don't show error to user as this is background save
+    // Only call backend for real tabs (UUIDs), not temporary Welcome tabs (timestamps)
+    const isValidUUID = typeof tabId === 'string' && tabId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    if (isValidUUID) {
+      try {
+        await workspaceApiService.updateActiveTab(tabId);
+        console.log('✅ Tab selected and active status saved:', tabId);
+      } catch (error) {
+        console.error('❌ Failed to save active tab status:', error);
+        // Don't show error to user as this is background save
+      }
+    } else {
+      console.log('📝 Skipping backend save for temporary Welcome tab:', tabId);
     }
   };
 
@@ -2801,6 +2971,14 @@ export default function HomePage() {
   const handleTabTypeChange = async (tabId, newType) => {
     try {
     const { projectId, pageId } = selectedPage;
+    
+      // Check if this is a valid UUID (not a temporary Welcome tab)
+      const isValidUUID = typeof tabId === 'string' && tabId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      if (!isValidUUID) {
+        console.log('📝 Cannot change type of temporary Welcome tab with timestamp ID:', tabId);
+        showToastNotification('Please create a real tab first before changing its type', 'error');
+        return;
+      }
     
       // Convert display name to internal type
       const internalType = mapDisplayNameToTabType(newType);
@@ -3718,6 +3896,34 @@ export default function HomePage() {
                               )}
                             </div>
                             
+                            {/* Data Encryption */}
+                            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                              <h5 className="text-sm font-semibold text-green-800 mb-4">Data Encryption</h5>
+                              
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="text-sm font-medium text-green-700">Tab Data Encryption</div>
+                                    <div className="text-xs text-green-600">Automatic encryption using your login password</div>
+                                  </div>
+                                  <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md">
+                                    ✓ Active
+                                  </span>
+                                </div>
+                                
+                                <div className="text-xs text-green-700 bg-green-100 px-3 py-2 rounded-md">
+                                  🔒 All tab data is automatically encrypted with your login password. No manual action required.
+                                </div>
+                                
+                                <div className="text-xs text-green-600 space-y-1">
+                                  <div>• Automatic AES-256 encryption with your password</div>
+                                  <div>• Seamless encryption/decryption on login</div>
+                                  <div>• Each data record has a unique salt</div>
+                                  <div>• No performance impact on normal usage</div>
+                                </div>
+                              </div>
+                            </div>
+                            
                             {/* Password Management */}
                             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                               <h5 className="text-sm font-semibold text-gray-800 mb-4">Password Management</h5>
@@ -4255,7 +4461,7 @@ export default function HomePage() {
                         ) : (
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <span 
-                              className="text-sm text-gray-700 block w-full"
+                              className="text-sm text-gray-700 block w-full flex items-center"
                               style={{
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -4395,7 +4601,7 @@ export default function HomePage() {
                               ) : (
                                 <div className="flex-1 min-w-0 overflow-hidden">
                                   <span 
-                                    className="text-sm text-gray-700 block w-full"
+                                    className="text-sm text-gray-700 block w-full flex items-center"
                                     style={{
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
@@ -4506,6 +4712,8 @@ export default function HomePage() {
               }
               
               // Have projects and pages, show tab content
+              const activeTabForDisplay = findActiveTabOrWelcome(currentPage?.tabs);
+              
               return (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -4513,43 +4721,28 @@ export default function HomePage() {
                   <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
-                  <span>{(() => {
-                    const currentProject = projects.find(p => p.id === selectedPage.projectId);
-                    const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
-                    return activeTab?.name || 'Welcome';
-                  })()}</span>
+                  <span>{activeTabForDisplay?.name || 'Welcome'}</span>
                 </h2>
                 <select 
                   className="px-3 py-1 border border-gray-300 rounded-md text-sm flex items-center space-x-2 bg-white hover:border-blue-400 focus:border-blue-500 focus:outline-none transition-colors"
-                  value={(() => {
-                    const currentProject = projects.find(p => p.id === selectedPage.projectId);
-                    const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
-                    return mapTabTypeToDisplayName(activeTab?.type || activeTab?.tabType) || 'Design Tables';
-                  })()}
+                  value={currentTabType}
                   onChange={(e) => {
-                    const currentProject = projects.find(p => p.id === selectedPage.projectId);
-                    const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                    const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
-                    if (activeTab) {
-                      handleTabTypeChange(activeTab.id, e.target.value);
+                    // Only handle change if there's an active tab and a valid selection (not empty string)
+                    if (activeTabForDisplay && e.target.value && e.target.value !== '') {
+                      handleTabTypeChange(activeTabForDisplay.id, e.target.value);
                     }
                   }}
                 >
-                  <option>Design Tables</option>
-                  <option>Snow Load</option>
-                  <option>Wind Load</option>
-                  <option>Seismic Template</option>
+                  <option value="">Select tab type...</option>
+                  <option value="Design Tables">Design Tables</option>
+                  <option value="Snow Load">Snow Load</option>
+                  <option value="Wind Load">Wind Load</option>
+                  <option value="Seismic Template">Seismic Template</option>
                 </select>
               </div>
               
               <div className="text-gray-600">
                 {(() => {
-                  const currentProject = projects.find(p => p.id === selectedPage.projectId);
-                  const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                  const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
-                  
                   // Only create Welcome tab if NO tabs exist at all (not just no active tab)
                   if (currentPage && (!currentPage.tabs || currentPage.tabs.length === 0)) {
                     console.log('No tabs found, creating Welcome tab for page:', currentPage.id);
@@ -4565,7 +4758,7 @@ export default function HomePage() {
                   }
 
                   // If tabs exist but no active tab, this should be handled by findActiveTabOrWelcome
-                  if (!activeTab) {
+                  if (!activeTabForDisplay) {
                     return (
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
@@ -4575,8 +4768,8 @@ export default function HomePage() {
                     );
                   }
                   
-                  if (activeTab?.type === 'snow_load' || activeTab?.tabType === 'snow_load') {
-                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
+                  if (activeTabForDisplay?.type === 'snow_load' || activeTabForDisplay?.tabType === 'snow_load') {
+                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTabForDisplay.id}`;
                     const snowDefaults = {
                       location: 'North Vancouver',
                       slope: 1,
@@ -4585,7 +4778,7 @@ export default function HomePage() {
                       cb: 0.8
                     };
                     // Use merged data from database + template, fallback to local state for immediate updates
-                    const mergedSnowDefaults = activeTab.mergedData?.snowDefaults || {};
+                    const mergedSnowDefaults = activeTabForDisplay.mergedData?.snowDefaults || {};
                     const localSnowData = snowLoadTabData[tabKey] || {};
                     const data = { ...snowDefaults, ...mergedSnowDefaults, ...localSnowData };
                     
@@ -4607,7 +4800,14 @@ export default function HomePage() {
                             [field]: value
                           }
                         };
-                        await workspaceStateService.updateTabData(activeTab.id, 'snow_load', deltaData);
+                        
+                                                  if (encryptionEnabled && userPassword) {
+                            // Use encrypted save operation with stored password
+                            await workspaceStateService.updateTabDataEncrypted(activeTabForDisplay.id, 'snow_load', deltaData, userPassword);
+                          } else {
+                            // Use regular save operation
+                            await workspaceStateService.updateTabData(activeTabForDisplay.id, 'snow_load', deltaData);
+                          }
                       } catch (error) {
                         console.error('Error saving snow load data:', error);
                         showToastNotification('Failed to save changes: ' + error.message, 'error');
@@ -4647,7 +4847,7 @@ export default function HomePage() {
                     };
 
                     // Use merged data from database + template, fallback to local state for immediate updates
-                    const mergedDriftDefaults = activeTab.mergedData?.driftDefaults || {};
+                    const mergedDriftDefaults = activeTabForDisplay.mergedData?.driftDefaults || {};
                     const localDriftData = snowLoadTabData[tabKey] || {};
                     const driftData = { ...driftDefaults, ...mergedDriftDefaults, ...localDriftData };
                     
@@ -4686,7 +4886,7 @@ export default function HomePage() {
                             [field]: value
                           }
                         };
-                        await workspaceStateService.updateTabData(activeTab.id, 'snow_load', deltaData);
+                                                  await workspaceStateService.updateTabData(activeTabForDisplay.id, 'snow_load', deltaData);
                       } catch (error) {
                         console.error('Error saving drift data:', error);
                         showToastNotification('Failed to save changes: ' + error.message, 'error');
@@ -5252,8 +5452,8 @@ export default function HomePage() {
                     );
                   }
                   
-                  if (activeTab?.type === 'wind_load' || activeTab?.tabType === 'wind_load') {
-                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
+                  if (activeTabForDisplay?.type === 'wind_load' || activeTabForDisplay?.tabType === 'wind_load') {
+                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTabForDisplay.id}`;
                     const windDefaults = {
                       location: 'Richmond',
                       iw: 1,
@@ -5272,7 +5472,7 @@ export default function HomePage() {
                       cpiMax: 0.3
                     };
                     // Use merged data from database + template, fallback to local state for immediate updates
-                    const mergedWindDefaults = activeTab.mergedData?.windDefaults || {};
+                    const mergedWindDefaults = activeTabForDisplay.mergedData?.windDefaults || {};
                     const localWindData = windLoadTabData[tabKey] || {};
                     const data = { ...windDefaults, ...mergedWindDefaults, ...localWindData };
                     
@@ -5294,7 +5494,14 @@ export default function HomePage() {
                             [field]: value
                           }
                         };
-                        await workspaceStateService.updateTabData(activeTab.id, 'wind_load', deltaData);
+                        
+                                                  if (encryptionEnabled && userPassword) {
+                            // Use encrypted save operation with stored password
+                            await workspaceStateService.updateTabDataEncrypted(activeTabForDisplay.id, 'wind_load', deltaData, userPassword);
+                          } else {
+                            // Use regular save operation
+                            await workspaceStateService.updateTabData(activeTabForDisplay.id, 'wind_load', deltaData);
+                          }
                       } catch (error) {
                         console.error('Error saving wind load data:', error);
                         showToastNotification('Failed to save changes: ' + error.message, 'error');
@@ -5674,9 +5881,9 @@ export default function HomePage() {
                   
 
                   
-                  if (activeTab?.type === 'seismic' || activeTab?.tabType === 'seismic') {
+                  if (activeTabForDisplay?.type === 'seismic' || activeTabForDisplay?.tabType === 'seismic') {
                     // Unique key for this tab
-                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab.id}`;
+                    const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTabForDisplay.id}`;
                     // Use merged data from database + template, fallback to local state for immediate updates
                     const seismicDefaults = {
                       designer: '',
@@ -5687,12 +5894,12 @@ export default function HomePage() {
                       bldgCode: '',
                       apiKey: ''
                     };
-                    const mergedSeismicData = activeTab.mergedData?.seismicTabData || {};
+                    const mergedSeismicData = activeTabForDisplay.mergedData?.seismicTabData || {};
                     const localSeismicData = seismicTabData[tabKey] || {};
                     const data = { ...seismicDefaults, ...mergedSeismicData, ...localSeismicData };
                     
                     // Use seismic results from database if available, otherwise use local React state
-                    const persistedSeismicResults = activeTab.mergedData?.seismicResults || {};
+                    const persistedSeismicResults = activeTabForDisplay.mergedData?.seismicResults || {};
                     const localSeismicResults = seismicResults[tabKey] || null;
                     const seismicResult = localSeismicResults || (persistedSeismicResults.site_class ? persistedSeismicResults : null);
                     const handleChange = async (field, value) => {
@@ -5721,7 +5928,14 @@ export default function HomePage() {
                               [field]: value
                             }
                           };
-                          await workspaceStateService.updateTabData(activeTab.id, 'seismic', deltaData);
+                          
+                          if (encryptionEnabled && userPassword) {
+                            // Use encrypted save operation with stored password
+                            await workspaceStateService.updateTabDataEncrypted(activeTabForDisplay.id, 'seismic', deltaData, userPassword);
+                          } else {
+                            // Use regular save operation
+                            await workspaceStateService.updateTabData(activeTabForDisplay.id, 'seismic', deltaData);
+                          }
                         } catch (error) {
                           console.error('Error saving seismic data:', error);
                           showToastNotification('Failed to save changes: ' + error.message, 'error');
@@ -5901,12 +6115,10 @@ export default function HomePage() {
                                 });
                                 if (!res.ok) throw new Error('Failed to fetch seismic info');
                                 const result = await res.json();
-                                console.log('🎯 Seismic API response received:', result);
                                 setSeismicResults(prev => ({
                                   ...prev,
                                   [tabKey]: result
                                 }));
-                                console.log('🎯 About to save seismic results to database...');
                                 
                                 // Save seismic results to database for persistence
                                 try {
@@ -5922,9 +6134,7 @@ export default function HomePage() {
                                       sa_x450: result.sa_x450
                                     }
                                   };
-                                  console.log('🔍 Saving seismic results to database:', seismicResultsDelta);
-                                  await workspaceStateService.saveTabDataImmediately(activeTab.id, 'seismic', seismicResultsDelta);
-                                  console.log('✅ Seismic results saved successfully');
+                                  await workspaceStateService.saveTabDataImmediately(activeTabForDisplay.id, 'seismic', seismicResultsDelta);
                                 } catch (error) {
                                   console.error('❌ Error saving seismic results:', error);
                                   // Don't show error to user as this is background save - the UI is already working
@@ -5988,7 +6198,7 @@ export default function HomePage() {
                               // Clear data from database as well
                               try {
                                 // Use the new replace method to completely replace with empty object
-                                await workspaceApiService.replaceTabData(activeTab.id, {});
+                                await workspaceApiService.replaceTabData(activeTabForDisplay.id, {});
                                 console.log('✅ Seismic data completely replaced with empty object in database');
                               } catch (error) {
                                 console.error('Error clearing seismic data:', error);
@@ -6122,7 +6332,7 @@ export default function HomePage() {
                   // Default content for other tabs
                   return (
                     <>
-                      {(activeTab?.type === 'Welcome' || activeTab?.tabType === 'Welcome' || activeTab?.type === 'welcome' || activeTab?.tabType === 'welcome') ? (
+                      {(activeTabForDisplay?.type === 'Welcome' || activeTabForDisplay?.tabType === 'Welcome' || activeTabForDisplay?.type === 'welcome' || activeTabForDisplay?.tabType === 'welcome') ? (
                         <div className="welcome-content">
                           <div className="feature-overview mb-6">
                             <h3 className="text-lg font-semibold text-gray-800 mb-3">Available Tools:</h3>
@@ -6142,7 +6352,7 @@ export default function HomePage() {
                             </ol>
                           </div>
                         </div>
-                      ) : (activeTab?.type === 'design_tables' || activeTab?.tabType === 'design_tables') ? (
+                      ) : (activeTabForDisplay?.type === 'design_tables' || activeTabForDisplay?.tabType === 'design_tables') ? (
                         <div className="design-tables-content">
                           <div className="workspace-area">
                             <h3 className="text-lg font-semibold text-gray-800 mb-3">Design Tables & Diagrams</h3>
@@ -6161,7 +6371,7 @@ export default function HomePage() {
                         </div>
                       ) : (
                         <>
-                          <p>Welcome to the {activeTab?.name || 'workspace'} area.</p>
+                          <p>Welcome to the {activeTabForDisplay?.name || 'workspace'} area.</p>
                           <p className="mt-2">This is where you can manage your project information and calculations.</p>
                         </>
                       )}
@@ -6404,6 +6614,18 @@ export default function HomePage() {
                 </svg>
                 <span>Close All Tabs</span>
               </button>
+              
+              <div className="border-t border-gray-200 my-1"></div>
+              
+              <button
+                onClick={() => handleContextMenuAction('closeThisTab')}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-red-100 flex items-center space-x-2 text-red-600"
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Close this tab</span>
+              </button>
             </>
           )}
         </div>
@@ -6559,7 +6781,7 @@ export default function HomePage() {
                 onClick={() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
-                  const activeTab = findActiveTab(currentPage?.tabs);
+                  const activeTab = findActiveTabOrWelcome(currentPage?.tabs);
                   const tabKey = `${selectedPage.projectId}_${selectedPage.pageId}_${activeTab?.id}`;
                   // Use merged data from database + template, fallback to local state
                   const mergedSeismicData = activeTab.mergedData?.seismicTabData || {};
@@ -6754,6 +6976,66 @@ export default function HomePage() {
                 disabled={seismicDecryptLoading}
               >
                 {seismicDecryptLoading ? 'Decrypting...' : 'Decrypt & Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Prompt for Encrypted Data */}
+      {showPasswordPrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <svg style={{ width: '24px', height: '24px' }} className="text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Encrypted Data Detected
+              </h3>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-4">
+                Your workspace contains encrypted data. Please enter your password to decrypt and access your data.
+              </p>
+              <input
+                type="password"
+                placeholder="Enter your password"
+                className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    const password = e.target.value;
+                    if (password && passwordPromptCallback) {
+                      passwordPromptCallback(password);
+                    }
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPasswordPrompt(false);
+                  setPasswordPromptCallback(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
+              >
+                Skip
+              </button>
+              <button
+                onClick={() => {
+                  const passwordInput = document.querySelector('input[type="password"]');
+                  const password = passwordInput?.value;
+                  if (password && passwordPromptCallback) {
+                    passwordPromptCallback(password);
+                  }
+                }}
+                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition"
+              >
+                🔓 Decrypt Data
               </button>
             </div>
           </div>
