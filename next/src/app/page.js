@@ -7,6 +7,18 @@ import { workspaceStateService } from '../services/workspaceStateService';
 import { tabTemplateService } from '../services/tabTemplateService';
 import { workspaceApiService } from '../services/workspaceApiService';
 import ApiKeyInput from '../components/ApiKeyInput';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
+import { ModeToggle } from '@/components/mode-toggle';
 
 // Add CSS for hiding scrollbars
 const scrollbarHideStyles = `
@@ -127,9 +139,7 @@ export default function HomePage() {
   
 
   
-  // Language dropdown state
-  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('Auto-detect');
+
   
   // Workspace state management
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
@@ -1767,10 +1777,11 @@ export default function HomePage() {
 
   // Toast notification helper
   const showToastNotification = (message, type = 'success') => {
-    setToastMessage(message);
-    setToastType(type);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 4000);
+    if (type === 'error') {
+      toast.error(message);
+    } else {
+      toast.success(message);
+    }
   };
 
 
@@ -3122,45 +3133,35 @@ export default function HomePage() {
 
   // If not authenticated, show login form
   if (!isAuthenticated) {
-    return (
+  return (
       <>
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen bg-background">
           {/* Top bar */}
           <div className="flex justify-between items-center p-6 max-w-7xl mx-auto">
             <span className="text-xl font-semibold">
               Welcome to Our Platform
             </span>
-            <div>
-              <button
-                onClick={() => setShowForm(true)}
-                className="rounded bg-yellow-100 px-4 py-2 hover:bg-yellow-200 transition flex items-center space-x-2"
-              >
-                <svg style={{ width: '14px', height: '14px' }} className="text-yellow-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Start now</span>
-              </button>
-            </div>
           </div>
 
           {/* Main content area */}
           <div className="flex-1 flex items-center justify-center px-6 py-12">
             {showForm ? (
-              <div style={{ width: '320px', maxWidth: '320px' }} className="mx-auto">
-                <h2 className="text-2xl font-bold text-gray-800 text-center mb-8">
-                  {isLogin ? 'Sign In' : 'Register'}
-                </h2>
-                
-                <div className="bg-gray-50 rounded-lg p-8 overflow-visible" style={{ width: '100%' }}>
-                  <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              <Card className="w-full max-w-md mx-auto">
+                <CardHeader>
+                  <CardTitle className="text-center">
+                    {isLogin ? 'Sign In' : 'Register'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmit} className="space-y-6">
                     {!isLogin && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div className="space-y-2">
                         {(focus.username || username) && (
-                          <label className="block text-xs text-blue-600 font-medium transition-all duration-200">
+                          <Label className="text-xs text-primary font-medium">
                             Username
-                          </label>
+                          </Label>
                         )}
-                        <input
+                        <Input
                           type="text"
                           placeholder={(!focus.username && !username) ? 'Enter your username' : ''}
                           value={username}
@@ -3173,24 +3174,23 @@ export default function HomePage() {
                             if (usernameError) setUsernameError('');
                           }}
                           onBlur={() => setFocus(f => ({ ...f, username: false }))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                          style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
+                          className="h-12"
                         />
                         {usernameError && (
-                          <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                          <div className="text-destructive text-xs mt-1 bg-destructive/10 px-3 py-2 rounded-md border border-destructive/20">
                             {usernameError}
                           </div>
                         )}
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div className="space-y-2">
                       {(focus.email || email) && (
-                        <label className="block text-xs text-blue-600 font-medium transition-all duration-200">
+                        <Label className="text-xs text-primary font-medium">
                           Email Address
-                        </label>
+                        </Label>
                       )}
-                      <input
+                      <Input
                         type="email"
                         placeholder={(!focus.email && !email) ? 'Enter your email' : ''}
                         value={email}
@@ -3203,23 +3203,22 @@ export default function HomePage() {
                           if (emailError) setEmailError('');
                         }}
                         onBlur={() => setFocus(f => ({ ...f, email: false }))}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                        style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
+                        className="h-12"
                       />
                       {emailError && (
-                        <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                        <div className="text-destructive text-xs mt-1 bg-destructive/10 px-3 py-2 rounded-md border border-destructive/20">
                           {emailError}
                         </div>
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div className="space-y-2">
                       {(focus.password || password) && (
-                        <label className="block text-xs text-blue-600 font-medium transition-all duration-200">
+                        <Label className="text-xs text-primary font-medium">
                           Password
-                        </label>
+                        </Label>
                       )}
-                      <input
+                      <Input
                         type="password"
                         placeholder={(!focus.password && !password) ? 'Enter your password' : ''}
                         value={password}
@@ -3232,42 +3231,31 @@ export default function HomePage() {
                           if (passwordError) setPasswordError('');
                         }}
                         onBlur={() => setFocus(f => ({ ...f, password: false }))}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                        style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
+                        className="h-12"
                       />
                       {!isLogin && (
-                        <div style={{ 
-                          fontSize: '12px', 
-                          marginTop: '4px', 
-                          padding: '8px 12px', 
-                          borderRadius: '6px', 
-                          border: '1px solid #f3f4f6', 
-                          backgroundColor: '#fafafa', 
-                          color: '#6b7280',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}>
-                          <svg style={{ width: '12px', height: '12px', marginRight: '8px', color: '#9ca3af' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="text-xs mt-1 p-3 rounded-md border border-muted bg-muted/50 text-muted-foreground flex items-center">
+                          <svg style={{ width: '12px', height: '12px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           <span>Password must be at least 8 characters with at least one uppercase letter and one number.</span>
                         </div>
                       )}
                       {passwordError && (
-                        <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                        <div className="text-destructive text-xs mt-1 bg-destructive/10 px-3 py-2 rounded-md border border-destructive/20">
                           {passwordError}
                         </div>
                       )}
                     </div>
 
                     {!isLogin && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div className="space-y-2">
                         {(focus.confirmPassword || confirmPassword) && (
-                          <label className="block text-xs text-blue-600 font-medium transition-all duration-200">
+                          <Label className="text-xs text-primary font-medium">
                             Confirm Password
-                          </label>
+                          </Label>
                         )}
-                        <input
+                        <Input
                           type="password"
                           placeholder={(!focus.confirmPassword && !confirmPassword) ? 'Confirm your password' : ''}
                           value={confirmPassword}
@@ -3280,18 +3268,17 @@ export default function HomePage() {
                             if (confirmPasswordError) setConfirmPasswordError('');
                           }}
                           onBlur={() => setFocus(f => ({ ...f, confirmPassword: false }))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                          style={{ width: '100%', boxSizing: 'border-box', height: '48px' }}
+                          className="h-12"
                         />
                         {confirmPasswordError && (
-                          <div className="text-gray-700 text-xs mt-1 bg-gray-100 px-3 py-2 rounded-md shadow-sm border border-gray-200">
+                          <div className="text-destructive text-xs mt-1 bg-destructive/10 px-3 py-2 rounded-md border border-destructive/20">
                             {confirmPasswordError}
                           </div>
                         )}
                       </div>
                     )}
 
-                    <button
+                    <Button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
@@ -3349,32 +3336,22 @@ export default function HomePage() {
                         // If all validations pass, submit the form
                         handleSubmit(e);
                       }}
-                      onMouseEnter={() => setIsHovered(true)}
-                      onMouseLeave={() => setIsHovered(false)}
-                      // not working tailwind classes: color classes. round-corner class
-                      className="w-full hover:bg-blue-900 font-medium text-sm flex items-center justify-center space-x-2"
-                      style={{ 
-                        border: '1px solid #2563eb', 
-                        height: '48px',
-                        backgroundColor: isHovered ? '#1d4ed8' : '#2563eb', // #2563eb = blue-600
-                        color: '#ffffff', // Force white text
-                        borderRadius: '0.375rem'
-                      }}
+                      className="w-full h-12 flex items-center justify-center space-x-2"
                     >
                       <svg style={{ width: '14px', height: '14px' }} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                       </svg>
                       <span>{isLogin ? 'Sign In' : 'Register'}</span>
-                    </button>
+                    </Button>
                   </form>
 
                   {/* Action buttons */}
-                  <div style={{ marginTop: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className="mt-8 text-center space-y-4">
                     {isLogin ? (
                       <>
                         {/* Login page: Two buttons in same line */}
                         <div className="w-full max-w-md mx-auto flex gap-4 mt-2">
-                          <button
+                          <Button
                             onClick={() => {
                               setIsLogin(!isLogin);
                               setErrorMessage('');
@@ -3387,33 +3364,35 @@ export default function HomePage() {
                               setConfirmPassword('');
                               setUsername('');
                             }}
-                            className="w-1/2 h-12 bg-white border border-gray-200 rounded-md font-medium flex items-center justify-center hover:bg-gray-50 transition space-x-2"
+                            variant="outline"
+                            className="w-1/2 h-12 flex items-center justify-center space-x-2"
                             type="button"
                           >
                             <svg style={{ width: '16px', height: '16px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                             </svg>
                             <span>Need to register?</span>
-                          </button>
+                          </Button>
                           
-                          <button
+                          <Button
                             onClick={() => {
                               setErrorMessage('Forgot password functionality coming soon!');
                             }}
-                            className="w-1/2 h-12 bg-white border border-gray-200 rounded-md font-medium flex items-center justify-center hover:bg-gray-50 transition space-x-2"
+                            variant="outline"
+                            className="w-1/2 h-12 flex items-center justify-center space-x-2"
                             type="button"
                           >
                             <svg style={{ width: '16px', height: '16px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                             </svg>
                             <span>Forgot Password</span>
-                          </button>
+                          </Button>
                         </div>
                       </>
                     ) : (
                       <>
                         {/* Register page: Full width button */}
-                        <button
+                        <Button
                           onClick={() => {
                             setIsLogin(!isLogin);
                             setErrorMessage('');
@@ -3426,21 +3405,20 @@ export default function HomePage() {
                             setConfirmPassword('');
                             setUsername('');
                           }}
-                          className="w-full bg-white text-blue-600 flex items-center justify-center gap-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200 font-medium text-sm"
-                          style={{ height: '48px' }}
+                          variant="outline"
+                          className="w-full h-12 flex items-center justify-center gap-2"
                         >
                           <svg style={{ width: '12px', height: '12px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                           </svg>
                           <span>Have an account?</span>
-                        </button>
+                        </Button>
                       </>
                     )}
 
                     {/* Language selector */}
                     <div className="pt-2 flex justify-center">
-                      <button className="bg-white text-gray-500 text-xs flex items-center gap-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200"
-                        style={{ height: '48px', padding: '0 16px' }}>
+                      <Button variant="outline" size="sm" className="h-12 px-4 flex items-center gap-1">
                         <svg style={{ width: '12px', height: '12px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -3448,12 +3426,12 @@ export default function HomePage() {
                         <svg style={{ width: '8px', height: '8px' }} className="text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                      </button>
+                      </Button>
                     </div>
 
                     {/* Cancel button */}
                     <div className="pt-2 flex justify-center">
-                      <button
+                      <Button
                         onClick={() => {
                           setShowForm(false);
                           setErrorMessage('');
@@ -3467,35 +3445,37 @@ export default function HomePage() {
                           setConfirmPasswordError('');
                           setIsLogin(true);
                         }}
-                        className="bg-white text-gray-500 text-xs flex items-center gap-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200"
-                        style={{ height: '48px', padding: '0 16px' }}
+                        variant="outline"
+                        size="sm"
+                        className="h-12 px-4 flex items-center gap-1"
                       >
                         <svg style={{ width: '12px', height: '12px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                         <span>Cancel</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ) : (
               <div className="text-center">
-                <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                <h1 className="text-4xl font-bold text-foreground mb-4">
                   Welcome to Our Platform
                 </h1>
-                <p className="text-xl text-gray-600 mb-8">
+                <p className="text-xl text-muted-foreground mb-8">
                   Please sign in or register to continue
                 </p>
-                <button
+                <Button
                   onClick={() => setShowForm(true)}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 transition flex items-center space-x-2 mx-auto"
+                  size="lg"
+                  className="px-8 py-3 text-lg font-semibold flex items-center space-x-2 mx-auto"
                 >
                   <svg style={{ width: '18px', height: '18px' }} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   <span>Get Started</span>
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -3522,17 +3502,19 @@ export default function HomePage() {
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-lg font-semibold ${errorMessage.includes('successful') ? 'text-green-600' : 'text-gray-900'}`}>
+                <h3 className={`text-lg font-semibold ${errorMessage.includes('successful') ? 'text-green-600' : 'text-foreground'}`}>
                   {errorMessage.includes('successful') ? 'Success' : 'Message'}
                 </h3>
-                <button
+                <Button
                   onClick={() => setShowErrorDialog(false)}
-                  className="text-gray-400 hover:text-gray-600 transition"
+                  variant="ghost"
+                  size="sm"
+                  className="text-gray-400 hover:text-gray-600"
                 >
                   <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                </button>
+                </Button>
               </div>
               <div className="flex items-center mb-4">
                 {errorMessage.includes('successful') && (
@@ -3540,19 +3522,16 @@ export default function HomePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 )}
-                <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-gray-700'}`}>{errorMessage}</p>
+                <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-foreground'}`}>{errorMessage}</p>
               </div>
               <div className="flex justify-end">
-                <button
+                <Button
                   onClick={() => setShowErrorDialog(false)}
-                  className={`px-4 py-2 text-white rounded-md transition ${
-                    errorMessage.includes('successful') 
-                      ? 'bg-green-600 hover:bg-green-700' 
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
+                  variant={errorMessage.includes('successful') ? 'default' : 'default'}
+                  className={errorMessage.includes('successful') ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}
                 >
                   OK
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -3565,12 +3544,12 @@ export default function HomePage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: scrollbarHideStyles }} />
-      <div className="h-screen flex flex-col bg-gray-50">
+              <div className="h-screen flex flex-col bg-background">
       {/* Header Area */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div className="bg-background border-b border-border px-6 py-4 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center">
-          <span className="text-xl font-semibold text-gray-800">
+                        <span className="text-xl font-semibold text-foreground">
             Welcome, {username || 'User'}
           </span>
         </div>
@@ -3578,68 +3557,25 @@ export default function HomePage() {
         {/* Center - Empty space */}
         <div className="flex-1"></div>
 
-        {/* Right side - Language, Settings, Logout */}
+        {/* Right side - Mode Toggle, Settings, Logout */}
         <div className="flex items-center space-x-4">
           
-          <div className="relative">
-            <button 
-              onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-              className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" 
-              title="Language"
-            >
-              <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-              </svg>
-            </button>
-            
-            {/* Language Dropdown */}
-            {showLanguageDropdown && (
-              <div 
-                className="absolute top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50"
-                style={{ 
-                  right: '0',
-                  transform: 'translateX(0)',
-                  width: '200px',
-                  backgroundColor: '#ffffff',
-                  backdropFilter: 'none'
-                }}
-              >
-                <div className="py-1 bg-white">
-                  <div className="px-3 py-1 text-xs font-normal text-gray-500 uppercase tracking-wider border-b border-gray-100 bg-white">
-                    Language
-                  </div>
-                  {['Auto-detect', 'English', 'Spanish', 'French'].map((language) => (
-                    <button
-                      key={language}
-                      onClick={() => {
-                        setSelectedLanguage(language);
-                        setShowLanguageDropdown(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition ${
-                        selectedLanguage === language ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
-                      }`}
-                    >
-                      {language}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Mode Toggle */}
+          <ModeToggle />
           
           {/* API Key Status Indicator */}
           <div className="relative">
-            <button 
+            <Button 
               onClick={() => {
                 setSelectedSettingCategory('security');
                 setShowSettingsDropdown(true);
               }}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-md transition ${
-                apiKeyLoading
-                  ? 'bg-gray-50 text-gray-500 border border-gray-200 cursor-not-allowed'
-                  : hasStoredApiKey 
-                    ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100' 
-                    : 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+              variant={apiKeyLoading ? "secondary" : (hasStoredApiKey ? "default" : "outline")}
+              disabled={apiKeyLoading}
+              className={`flex items-center space-x-2 ${
+                hasStoredApiKey 
+                  ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30' 
+                  : 'bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-900/30'
               }`}
               title={
                 hasStoredApiKey 
@@ -3653,164 +3589,127 @@ export default function HomePage() {
               <span className="text-xs font-medium">
                 {apiKeyLoading ? 'Checking...' : (hasStoredApiKey ? 'API Key ✓' : 'API Key ○')}
               </span>
-            </button>
+            </Button>
           </div>
           
           <div className="relative">
-            <button 
+            <Button 
               onClick={() => {
                 setSelectedSettingCategory('general');
                 setShowSettingsDropdown(true);
               }}
-              className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100" 
+              variant="ghost"
+              size="sm"
+              className="text-gray-600 hover:text-gray-800" 
               title="Settings"
             >
               <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-            </button>
+            </Button>
             
             {/* Settings Modal */}
-            {showSettingsDropdown && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-                <div style={{
-                  backgroundColor: 'white',
-                  borderRadius: '8px',
-                  maxWidth: '800px',
-                  width: '90%',
-                  height: '600px',
-                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}>
-                  {/* Header */}
-                  <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Settings
-                    </h3>
-                    <button
-                      onClick={() => setShowSettingsDropdown(false)}
-                      className="text-gray-400 hover:text-gray-600 transition"
-                    >
-                      <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  {/* Content Area */}
-                  <div className="flex flex-1 overflow-hidden">
+            <Dialog open={showSettingsDropdown} onOpenChange={setShowSettingsDropdown}>
+              <DialogContent className="w-[900px] h-[600px] flex flex-col p-0">
+                <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4 px-6 pt-6">
+                  <DialogTitle>Settings</DialogTitle>
+                </DialogHeader>
+                
+                {/* Content Area */}
+                <div className="flex flex-1 overflow-hidden">
                     {/* Left Sidebar - Categories */}
-                    <div className="w-64 bg-gray-50 border-r border-gray-200 p-4">
+                    <div className="w-64 bg-muted border-r border-border p-4">
                       <div className="space-y-1">
                         {/* General */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('general')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
+                          variant={selectedSettingCategory === 'general' ? 'secondary' : 'ghost'}
+                          className={`w-full justify-start ${
                             selectedSettingCategory === 'general' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'general' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">General</span>
-                        </button>
+                          <span>General</span>
+                        </Button>
                         
                         {/* Notifications */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('notifications')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
-                            selectedSettingCategory === 'notifications' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
-                          }`}
+                          variant={selectedSettingCategory === 'notifications' ? 'secondary' : 'ghost'}
+                          className="w-full justify-start"
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.19 4.19A2 2 0 004 6v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-1.81 1.19z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">Notifications</span>
-                        </button>
+                          <span>Notifications</span>
+                        </Button>
                         
                         {/* Personalization */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('personalization')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
-                            selectedSettingCategory === 'personalization' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
-                          }`}
+                          variant={selectedSettingCategory === 'personalization' ? 'secondary' : 'ghost'}
+                          className="w-full justify-start"
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">Personalization</span>
-                        </button>
+                          <span>Personalization</span>
+                        </Button>
                         
                         {/* Data Controls */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('data')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
-                            selectedSettingCategory === 'data' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
-                          }`}
+                          variant={selectedSettingCategory === 'data' ? 'secondary' : 'ghost'}
+                          className="w-full justify-start"
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">Data Controls</span>
-                        </button>
+                          <span>Data Controls</span>
+                        </Button>
                         
                         {/* Security */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('security')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
-                            selectedSettingCategory === 'security' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
-                          }`}
+                          variant={selectedSettingCategory === 'security' ? 'secondary' : 'ghost'}
+                          className="w-full justify-start"
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">Security</span>
-                        </button>
+                          <span>Security</span>
+                        </Button>
                         
                         {/* Account */}
-                        <button
+                        <Button
                           onClick={() => setSelectedSettingCategory('account')}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition ${
-                            selectedSettingCategory === 'account' 
-                              ? 'bg-white shadow-sm border border-gray-200' 
-                              : 'hover:bg-gray-100'
-                          }`}
+                          variant={selectedSettingCategory === 'account' ? 'secondary' : 'ghost'}
+                          className="w-full justify-start"
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                          <span className="text-sm font-medium text-gray-700">Account</span>
-                        </button>
+                          <span>Account</span>
+                        </Button>
                       </div>
                     </div>
                     
                     {/* Right Content Area */}
-                    <div className="flex-1 p-6 overflow-y-auto">
+                    <div className="flex-1 p-6 overflow-y-auto bg-background">
                       {selectedSettingCategory === 'general' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-6">General</h4>
+                          <h4 className="text-lg font-semibold text-foreground mb-6">General</h4>
                           <div className="space-y-6">
                             {/* Theme */}
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-700">Theme</span>
-                              <select className="px-3 py-1 text-sm border border-gray-300 rounded-md bg-white">
+                              <span className="text-sm font-medium text-foreground">Theme</span>
+                              <select className="px-3 py-1 text-sm border border-input rounded-md bg-background text-foreground">
                                 <option>System</option>
                                 <option>Light</option>
                                 <option>Dark</option>
@@ -3824,7 +3723,7 @@ export default function HomePage() {
                       
                       {selectedSettingCategory === 'security' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-6">Security</h4>
+                          <h4 className="text-lg font-semibold text-foreground mb-6">Security</h4>
                           <div className="space-y-6">
                             {/* Success/Error Messages */}
                             {apiKeySuccess && (
@@ -3849,24 +3748,24 @@ export default function HomePage() {
                             )}
                             
                             {/* API Key Management */}
-                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                              <h5 className="text-sm font-semibold text-gray-800 mb-4">API Key Management</h5>
+                            <div className="bg-muted rounded-lg p-4 border border-border">
+                              <h5 className="text-sm font-semibold text-foreground mb-4">API Key Management</h5>
                               
                               {/* Status */}
                               <div className="flex items-center justify-between mb-3">
-                                <span className="text-sm text-gray-700">Status:</span>
-                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                  hasStoredApiKey 
-                                    ? 'bg-green-100 text-green-800 border border-green-200' 
-                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                }`}>
+                                <span className="text-sm text-foreground">Status:</span>
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  hasStoredApiKey 
+                    ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' 
+                    : 'bg-muted text-muted-foreground border border-border'
+                }`}>
                                   {hasStoredApiKey ? '✓ Stored' : '○ Not stored'}
                                 </span>
                               </div>
                               
                               {/* Details */}
                               {hasStoredApiKey && apiKeyStatus && (
-                                <div className="text-xs text-gray-500 space-y-1 mb-4">
+                                <div className="text-xs text-muted-foreground space-y-1 mb-4">
                                   <div>Last used: {apiKeyStatus.lastUsedAt ? new Date(apiKeyStatus.lastUsedAt).toLocaleDateString() : 'Never'}</div>
                                   <div>Created: {apiKeyStatus.createdAt ? new Date(apiKeyStatus.createdAt).toLocaleDateString() : 'Unknown'}</div>
                                 </div>
@@ -3876,46 +3775,47 @@ export default function HomePage() {
                               {hasStoredApiKey ? (
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <div className="text-sm font-medium text-gray-700">API Key</div>
-                                    <div className="text-xs text-gray-500">Securely stored</div>
+                                                    <div className="text-sm font-medium text-foreground">API Key</div>
+                <div className="text-xs text-muted-foreground">Securely stored</div>
                                   </div>
-                                  <button 
+                                  <Button 
                                     onClick={() => {
                                       setShowDeleteApiKeyModal(true);
                                       setShowSettingsDropdown(false);
                                     }}
-                                    className="px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+                                    variant="destructive"
+                                    size="sm"
                                   >
                                     Delete
-                                  </button>
+                                  </Button>
                                 </div>
                               ) : (
-                                <div className="text-xs text-gray-500 text-center py-2">
+                                <div className="text-xs text-muted-foreground text-center py-2">
                                   No API key stored
                                 </div>
                               )}
                             </div>
                             
                             {/* Data Encryption */}
-                            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                              <h5 className="text-sm font-semibold text-green-800 mb-4">Data Encryption</h5>
+                            <div className="bg-green-100 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                              <h5 className="text-sm font-semibold text-green-800 dark:text-green-400 mb-4">Data Encryption</h5>
                               
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <div className="text-sm font-medium text-green-700">Tab Data Encryption</div>
-                                    <div className="text-xs text-green-600">Automatic encryption using your login password</div>
+                                    <div className="text-sm font-medium text-green-700 dark:text-green-300">Tab Data Encryption</div>
+                                    <div className="text-xs text-green-600 dark:text-green-400">Automatic encryption using your login password</div>
                                   </div>
                                   <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md">
                                     ✓ Active
                                   </span>
                                 </div>
                                 
-                                <div className="text-xs text-green-700 bg-green-100 px-3 py-2 rounded-md">
+                                <div className="text-xs text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 px-3 py-2 rounded-md">
                                   🔒 All tab data is automatically encrypted with your login password. No manual action required.
                                 </div>
                                 
-                                <div className="text-xs text-green-600 space-y-1">
+                                <div className="text-xs text-green-600 dark:text-green-400 space-y-1">
                                   <div>• Automatic AES-256 encryption with your password</div>
                                   <div>• Seamless encryption/decryption on login</div>
                                   <div>• Each data record has a unique salt</div>
@@ -3925,17 +3825,17 @@ export default function HomePage() {
                             </div>
                             
                             {/* Password Management */}
-                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                              <h5 className="text-sm font-semibold text-gray-800 mb-4">Password Management</h5>
+                            <div className="bg-muted rounded-lg p-4 border border-border">
+                              <h5 className="text-sm font-semibold text-foreground mb-4">Password Management</h5>
                               
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <div className="text-sm font-medium text-gray-700">Password</div>
-                                  <div className="text-xs text-gray-500">Last changed: 3 months ago</div>
+                                  <div className="text-sm font-medium text-foreground">Password</div>
+                                  <div className="text-xs text-muted-foreground">Last changed: 3 months ago</div>
                                 </div>
-                                <button className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                                <Button size="sm">
                                   Change
-                                </button>
+                                </Button>
                               </div>
                             </div>
                             
@@ -3947,21 +3847,21 @@ export default function HomePage() {
                       {/* Account Settings */}
                       {selectedSettingCategory === 'account' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-6">Account</h4>
+                          <h4 className="text-lg font-semibold text-foreground mb-6">Account</h4>
                           <div className="space-y-6">
                             {/* User ID Display and Edit */}
-                            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                              <h5 className="text-sm font-semibold text-blue-800 mb-4">User Information</h5>
+                            <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
+                              <h5 className="text-sm font-semibold text-primary mb-4">User Information</h5>
                               
                               <div className="space-y-3">
                                 
                                 {/* Username (Editable) */}
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm text-blue-700">Username:</span>
+                                  <span className="text-sm text-primary">Username:</span>
                                   <div className="flex items-center space-x-2">
-                                    <span className="text-sm font-medium text-blue-900">{username || 'Not set'}</span>
+                                    <span className="text-sm font-medium text-foreground">{username || 'Not set'}</span>
                                     {isAuthenticated && (
-                                      <button
+                                      <Button
                                         onClick={async () => {
                                           const newUsername = prompt('Enter new username:', username);
                                           if (newUsername && newUsername.trim()) {
@@ -3975,23 +3875,23 @@ export default function HomePage() {
                                             }
                                           }
                                         }}
-                                        className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                        size="sm"
                                         title="Change Username"
                                       >
                                         Edit
-                                      </button>
+                                      </Button>
                                     )}
                                   </div>
                                 </div>
                                 
                                 {/* Authentication Status */}
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm text-blue-700">Status:</span>
-                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                    isAuthenticated 
-                                      ? 'bg-green-100 text-green-800 border border-green-200' 
-                                      : 'bg-red-100 text-red-800 border border-red-200'
-                                  }`}>
+                                  <span className="text-sm text-primary">Status:</span>
+                                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  isAuthenticated 
+                    ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                    : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+                }`}>
                                     {isAuthenticated ? '✓ Authenticated' : '○ Not authenticated'}
                                   </span>
                                 </div>
@@ -4003,12 +3903,12 @@ export default function HomePage() {
                             {/* Password */}
                             <div className="flex items-center justify-between">
                               <div>
-                                <div className="text-sm font-medium text-gray-700">Password</div>
-                                <div className="text-xs text-gray-500">Last changed: 3 months ago</div>
+                                                <div className="text-sm font-medium text-foreground">Password</div>
+                <div className="text-xs text-muted-foreground">Last changed: 3 months ago</div>
                               </div>
-                              <button className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                              <Button size="sm">
                                 Change
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -4017,30 +3917,31 @@ export default function HomePage() {
                       {/* Placeholder content for other categories */}
                       {selectedSettingCategory !== 'general' && selectedSettingCategory !== 'security' && selectedSettingCategory !== 'account' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-6 capitalize">{selectedSettingCategory}</h4>
+                          <h4 className="text-lg font-semibold text-foreground mb-6 capitalize">{selectedSettingCategory}</h4>
                           <div className="text-center py-12">
                             <svg style={{ width: '48px', height: '48px' }} className="mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <p className="text-gray-500">Settings for {selectedSettingCategory} will be implemented soon.</p>
+                            <p className="text-muted-foreground">Settings for {selectedSettingCategory} will be implemented soon.</p>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
+              </DialogContent>
+            </Dialog>
           </div>
-          <button 
+          <Button 
             onClick={logout}
-            className="text-gray-600 hover:text-gray-800 transition p-2 rounded hover:bg-gray-100"
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-800"
             title="Logout"
           >
             <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -4049,32 +3950,36 @@ export default function HomePage() {
         {/* Project Sidebar */}
         <div 
           ref={sidebarRef}
-          className={`bg-white border-r border-gray-200 transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
+          className={`bg-card border-r border-border transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
           style={{ width: sidebarCollapsed ? '48px' : `${sidebarWidth}px` }}
         >
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            {!sidebarCollapsed && <span className="font-semibold text-gray-800">Projects</span>}
+                      <div className="p-4 border-b border-border flex items-center justify-between">
+                            {!sidebarCollapsed && <span className="font-semibold text-foreground">Projects</span>}
             <div className="flex items-center space-x-2">
               {!sidebarCollapsed && (
-                <button
+                <Button
                   onClick={addProject}
-                  className="p-1 rounded hover:bg-blue-100 transition bg-blue-50"
+                  variant="ghost"
+                  size="sm"
+                  className="p-1 hover:bg-blue-100 bg-blue-50"
                   title="New Project"
                 >
                   <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="p-1 rounded hover:bg-gray-100 transition bg-gray-50"
+                variant="ghost"
+                size="sm"
+                className="p-1 hover:bg-accent bg-muted"
                 title={sidebarCollapsed ? "Expand" : "Collapse"}
               >
                 <svg style={{ width: '14px', height: '14px' }} className={`text-gray-600 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -4169,18 +4074,20 @@ export default function HomePage() {
                         </div>
                       )}
                     </div>
-                    <button
+                    <Button
                       onClick={(e) => {
                         e.stopPropagation();
                         addPage(project.id);
                       }}
-                      className="p-1 rounded hover:bg-green-100 transition opacity-0 group-hover:opacity-100 bg-green-50"
+                      variant="ghost"
+                      size="sm"
+                      className="p-1 opacity-0 group-hover:opacity-100 bg-green-50 hover:bg-green-100"
                       title="Add Page"
                     >
                       <svg style={{ width: '12px', height: '12px' }} className="text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                    </button>
+                    </Button>
                   </div>
                   
 
@@ -4378,25 +4285,27 @@ export default function HomePage() {
         {/* Information Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tab Bar */}
-          <div className="bg-white border-b border-gray-200 flex items-center">
+          <div className="bg-card border-b border-border flex items-center">
             {/* Left scroll arrow - Fixed on left side */}
             {showLeftArrow && (
-              <button
+              <Button
                 onClick={scrollTabsLeft}
-                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0 border-r border-gray-200 bg-white"
+                variant="ghost"
+                size="sm"
+                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 border-r border-border bg-card"
                 title="Scroll Left"
               >
                 <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-              </button>
+              </Button>
             )}
             
             {/* Scrollable tabs container */}
             <div className="flex-1 relative overflow-hidden min-w-0" style={{ maxWidth: 'calc(100vw - 400px)' }}>
               <div
                 ref={tabContainerRef}
-                className="flex items-center bg-white overflow-x-auto scrollbar-hide"
+                className="flex items-center bg-card overflow-x-auto scrollbar-hide"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 onScroll={handleTabScroll}
               >
@@ -4408,8 +4317,8 @@ export default function HomePage() {
                   return currentTabs.map(tab => (
                     <div
                       key={tab.id}
-                      className={`flex items-center px-4 py-2 border-r border-gray-200 cursor-pointer group ${
-                        (tab.isActive || tab.active) ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-gray-50'
+                      className={`flex items-center px-4 py-2 border-r border-border cursor-pointer group ${
+                        (tab.isActive || tab.active) ? 'bg-primary/10 border-b-2 border-primary' : 'hover:bg-accent'
                       } ${
                         isDragging && draggedTab === tab.id ? 'opacity-50' : ''
                       } ${
@@ -4475,18 +4384,20 @@ export default function HomePage() {
                         )}
                       </div>
                       {currentTabs.length > 1 && !tab.locked && (
-                        <button
+                        <Button
                           onClick={async (e) => {
                             e.stopPropagation();
                             await closeTab(tab.id);
                           }}
-                          className="ml-2 p-1 rounded hover:bg-red-100 transition opacity-0 group-hover:opacity-100 bg-red-50 flex-shrink-0"
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2 p-1 opacity-0 group-hover:opacity-100 bg-red-50 hover:bg-red-100 flex-shrink-0"
                           title="Close Tab"
                         >
                           <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
-                        </button>
+                        </Button>
                       )}
                       {tab.locked && (
                         <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
@@ -4503,48 +4414,50 @@ export default function HomePage() {
             
             {/* Right scroll arrow - Fixed on right side */}
             {showRightArrow && (
-              <button
+              <Button
                 onClick={scrollTabsRight}
-                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0 border-l border-gray-200 bg-white"
+                variant="ghost"
+                size="sm"
+                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 border-l border-border bg-card"
                 title="Scroll Right"
               >
                 <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-              </button>
+              </Button>
             )}
             
             {/* Fixed right side controls - positioned at far right edge */}
-            <div className="flex items-center flex-shrink-0 bg-white border-l border-gray-200 ml-auto">
+            <div className="flex items-center flex-shrink-0 bg-card border-l border-border ml-auto">
               {/* Tab Dropdown button */}
               <div className="relative">
-                <button
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowTabDropdown(!showTabDropdown);
                   }}
-                  className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+                  variant="ghost"
+                  size="sm"
+                  className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent"
                   title="Tab Menu"
                 >
                   <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
-                </button>
+                </Button>
                 
                 {/* Dropdown Menu - Right-aligned to dropdown button */}
                 {showTabDropdown && (
                   <div 
-                    className="absolute top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+                    className="absolute top-full mt-1 bg-background border border-border rounded-md shadow-lg z-50"
                     style={{ 
                       right: '0',
                       transform: 'translateX(0)',
-                      width: '280px',
-                      backgroundColor: '#ffffff',
-                      backdropFilter: 'none'
+                      width: '280px'
                     }}
                   >
-                    <div className="py-1 bg-white">
-                      <div className="px-3 py-1 text-xs font-normal text-gray-200 uppercase tracking-wider border-b border-gray-100 bg-white">
+                    <div className="py-1 bg-background">
+                      <div className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border bg-background">
                         Current tabs
                       </div>
                       {(() => {
@@ -4555,10 +4468,10 @@ export default function HomePage() {
                         return currentTabs.map(tab => (
                           <div
                             key={tab.id}
-                            className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer ${
+                            className={`flex items-center justify-between px-3 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors ${
                               isDropdownDragging && dropdownDraggedTab === tab.id ? 'opacity-50' : ''
                             } ${
-                              dropdownDragOverTab === tab.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
+                              dropdownDragOverTab === tab.id ? 'border-l-2 border-l-primary bg-primary/10' : ''
                             }`}
                             style={{ 
                               cursor: isDropdownDragging ? 'grabbing' : 'grab'
@@ -4578,7 +4491,7 @@ export default function HomePage() {
                             onDragEnd={handleDropdownDragEnd}
                           >
                             <div className="flex items-center flex-1 min-w-0 overflow-hidden">
-                              <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg style={{ width: '12px', height: '12px' }} className="text-muted-foreground mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                               </svg>
                               {editingItem.type === 'tab' && editingItem.id.projectId === selectedPage.projectId && editingItem.id.pageId === selectedPage.pageId && editingItem.id.tabId === tab.id ? (
@@ -4594,14 +4507,14 @@ export default function HomePage() {
                                       handleEditCancel();
                                     }
                                   }}
-                                  className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                                  className="text-sm text-foreground bg-background border border-input rounded px-1 py-0.5 focus:outline-none focus:border-ring flex-1 min-w-0"
                                   autoFocus
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               ) : (
                                 <div className="flex-1 min-w-0 overflow-hidden">
                                   <span 
-                                    className="text-sm text-gray-700 block w-full flex items-center"
+                                    className="text-sm text-foreground block w-full flex items-center"
                                     style={{
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
@@ -4615,19 +4528,21 @@ export default function HomePage() {
                               )}
                             </div>
                             {currentTabs.length > 1 && !tab.locked && (
-                              <button
+                              <Button
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   await closeTab(tab.id);
                                   setShowTabDropdown(false);
                                 }}
-                                className="ml-2 p-1 rounded hover:bg-red-100 transition"
+                                variant="ghost"
+                                size="sm"
+                                className="ml-2 p-1 hover:bg-destructive/10 hover:text-destructive"
                                 title="Close Tab"
                               >
                                 <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
-                              </button>
+                              </Button>
                             )}
                             {tab.locked && (
                               <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
@@ -4645,15 +4560,17 @@ export default function HomePage() {
               </div>
               
               {/* Add Tab button - Fixed on far right */}
-              <button
+              <Button
                 onClick={addTab}
-                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-blue-100 transition bg-blue-50"
+                variant="ghost"
+                size="sm"
+                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent bg-muted"
                 title="Add Tab"
               >
                 <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -4671,8 +4588,8 @@ export default function HomePage() {
                       <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No projects yet</h3>
-                      <p className="text-gray-600">Create your first project and its page to start</p>
+                                      <h3 className="text-lg font-semibold text-foreground mb-2">No projects yet</h3>
+                <p className="text-muted-foreground">Create your first project and its page to start</p>
                     </div>
                   </div>
                 );
@@ -4689,8 +4606,8 @@ export default function HomePage() {
                       <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No pages yet</h3>
-                      <p className="text-gray-600">Add a page to your project to create tabs</p>
+                                      <h3 className="text-lg font-semibold text-foreground mb-2">No pages yet</h3>
+                <p className="text-muted-foreground">Add a page to your project to create tabs</p>
                     </div>
                   </div>
                 );
@@ -4704,8 +4621,8 @@ export default function HomePage() {
                       <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a page</h3>
-                      <p className="text-gray-600">Choose a page from the sidebar to manage tabs</p>
+                                      <h3 className="text-lg font-semibold text-foreground mb-2">Select a page</h3>
+                <p className="text-muted-foreground">Choose a page from the sidebar to manage tabs</p>
                     </div>
                   </div>
                 );
@@ -4715,16 +4632,16 @@ export default function HomePage() {
               const activeTabForDisplay = findActiveTabOrWelcome(currentPage?.tabs);
               
               return (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                  <div className="bg-card rounded-lg shadow-sm border border-border p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
+                <h2 className="text-lg font-semibold text-foreground flex items-center space-x-2">
                   <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                   <span>{activeTabForDisplay?.name || 'Welcome'}</span>
                 </h2>
                 <select 
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm flex items-center space-x-2 bg-white hover:border-blue-400 focus:border-blue-500 focus:outline-none transition-colors"
+                  className="px-3 py-1 border border-input rounded-md text-sm flex items-center space-x-2 bg-background text-foreground hover:border-ring focus:border-ring focus:outline-none transition-colors"
                   value={currentTabType}
                   onChange={(e) => {
                     // Only handle change if there's an active tab and a valid selection (not empty string)
@@ -4741,7 +4658,7 @@ export default function HomePage() {
                 </select>
               </div>
               
-              <div className="text-gray-600">
+                              <div className="text-muted-foreground">
                 {(() => {
                   // Only create Welcome tab if NO tabs exist at all (not just no active tab)
                   if (currentPage && (!currentPage.tabs || currentPage.tabs.length === 0)) {
@@ -4751,7 +4668,7 @@ export default function HomePage() {
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                          <p className="text-gray-600">Creating Welcome tab...</p>
+                          <p className="text-muted-foreground">Creating Welcome tab...</p>
                         </div>
                       </div>
                     );
@@ -4762,7 +4679,7 @@ export default function HomePage() {
                     return (
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                          <p className="text-gray-600">Loading tab content...</p>
+                          <p className="text-muted-foreground">Loading tab content...</p>
                         </div>
                       </div>
                     );
@@ -5005,9 +4922,9 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Slope</label>
-                                <input 
+                                <Input 
                                   type="number" 
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.slope}
                                   onChange={e => handleSnowChange('slope', parseFloat(e.target.value) || 0)}
                                 />
@@ -5020,10 +4937,10 @@ export default function HomePage() {
 
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Is</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.is}
                                   onChange={e => handleSnowChange('is', parseFloat(e.target.value) || 0)}
                                 />
@@ -5032,10 +4949,10 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ca</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.ca}
                                   onChange={e => handleSnowChange('ca', parseFloat(e.target.value) || 0)}
                                 />
@@ -5044,10 +4961,10 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Cb</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.cb}
                                   onChange={e => handleSnowChange('cb', parseFloat(e.target.value) || 0)}
                                 />
@@ -5148,10 +5065,10 @@ export default function HomePage() {
                                 <h5 className="font-medium text-purple-600">General Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">a (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="1.0"
                                     value={driftData.a}
                                     onChange={(e) => handleDriftChange('a', parseFloat(e.target.value) || 0)}
@@ -5160,10 +5077,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">h (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="5.0"
                                     value={driftData.h}
                                     onChange={(e) => handleDriftChange('h', parseFloat(e.target.value) || 0)}
@@ -5172,10 +5089,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">hp_lower (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="2.0"
                                     value={driftData.hp_lower}
                                     onChange={(e) => handleDriftChange('hp_lower', parseFloat(e.target.value) || 0)}
@@ -5184,10 +5101,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">x (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="3.0"
                                     value={driftData.x}
                                     onChange={(e) => handleDriftChange('x', parseFloat(e.target.value) || 0)}
@@ -5200,10 +5117,10 @@ export default function HomePage() {
                                 <h5 className="font-medium text-purple-600">Case 1 Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_upper (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="10.0"
                                     value={driftData.ws_upper}
                                     onChange={(e) => handleDriftChange('ws_upper', parseFloat(e.target.value) || 0)}
@@ -5212,10 +5129,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_upper (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="15.0"
                                     value={driftData.ls_upper}
                                     onChange={(e) => handleDriftChange('ls_upper', parseFloat(e.target.value) || 0)}
@@ -5224,10 +5141,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">hp_upper (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="1.0"
                                     value={driftData.hp_upper}
                                     onChange={(e) => handleDriftChange('hp_upper', parseFloat(e.target.value) || 0)}
@@ -5240,10 +5157,10 @@ export default function HomePage() {
                                 <h5 className="font-medium text-purple-600">Case 2 & 3 Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_lower2 (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="15.0"
                                     value={driftData.ws_lower2}
                                     onChange={(e) => handleDriftChange('ws_lower2', parseFloat(e.target.value) || 0)}
@@ -5252,10 +5169,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_lower2 (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="20.0"
                                     value={driftData.ls_lower2}
                                     onChange={(e) => handleDriftChange('ls_lower2', parseFloat(e.target.value) || 0)}
@@ -5264,10 +5181,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_lower3 (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="15.0"
                                     value={driftData.ws_lower3}
                                     onChange={(e) => handleDriftChange('ws_lower3', parseFloat(e.target.value) || 0)}
@@ -5276,10 +5193,10 @@ export default function HomePage() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_lower3 (m)</label>
-                                  <input 
+                                  <Input 
                                     type="number" 
                                     step="0.1"
-                                    className="px-2 py-1 border rounded text-sm"
+                                    className="h-8"
                                     placeholder="25.0"
                                     value={driftData.ls_lower3}
                                     onChange={(e) => handleDriftChange('ls_lower3', parseFloat(e.target.value) || 0)}
@@ -5570,10 +5487,10 @@ export default function HomePage() {
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Iw</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.iw}
                                   onChange={e => handleWindChange('iw', parseFloat(e.target.value) || 0)}
                                 />
@@ -5581,10 +5498,10 @@ export default function HomePage() {
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ce</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.ce}
                                   onChange={e => handleWindChange('ce', parseFloat(e.target.value) || 0)}
                                 />
@@ -5592,10 +5509,10 @@ export default function HomePage() {
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ct</label>
-                                <input 
+                                <Input 
                                   type="number" 
                                   step="0.1"
-                                  className="px-2 py-1 border rounded text-sm"
+                                  className="h-8"
                                   value={data.ct}
                                   onChange={e => handleWindChange('ct', parseFloat(e.target.value) || 0)}
                                 />
@@ -5943,110 +5860,132 @@ export default function HomePage() {
                       }
                     };
                     return (
-                      <div className="max-w-md mx-auto bg-orange-100 rounded-lg p-4 border border-orange-200">
-                        <div className="grid grid-cols-2 gap-2 items-center text-purple-700 text-base font-medium">
-                          <div className="text-right pr-2">Designer</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.designer || ''} onChange={e => handleChange('designer', e.target.value)} />
-                          <div className="text-right pr-2">Address *</div>
-                          <input 
-                            className={`bg-orange-50 rounded px-2 py-1 ${showSeismicValidationError && !data.address ? 'border-2 border-red-500' : ''}`} 
-                            value={data.address || ''} 
-                            onChange={e => handleChange('address', e.target.value)} 
-                            placeholder="Enter the address" 
-                          />
-                          <div className="text-right pr-2">Project #</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.project || ''} onChange={e => handleChange('project', e.target.value)} />
-                          <div className="text-right pr-2">Revision</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.revision || ''} onChange={e => handleChange('revision', e.target.value)} />
-                          <div className="text-right pr-2">Date</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.date || ''} onChange={e => handleChange('date', e.target.value)} />
-                          <div className="text-right pr-2">Bldg code</div>
-                          <input className="bg-orange-50 rounded px-2 py-1" value={data.bldgCode || ''} onChange={e => handleChange('bldgCode', e.target.value)} />
-                          <div className="text-right pr-2">Api_key *</div>
-                          {hasStoredApiKey ? (
-                            <div className="relative">
-                              <input
-                                type="text"
-                                value="Securely stored - no need to enter"
-                                disabled={true}
-                                className="bg-green-50 rounded px-2 py-1 border border-green-300 text-green-700 text-sm cursor-not-allowed w-full"
-                                style={{ minWidth: '280px' }}
-                              />
-
-                            </div>
-                          ) : (
-                            <input
-                              type="password"
-                              value={data.apiKey || ''}
-                              onChange={(e) => handleChange('apiKey', e.target.value)}
-                              placeholder="Enter your API key"
-                              disabled={apiKeyLoading}
-                              className={`bg-orange-50 rounded px-2 py-1 border focus:outline-none disabled:bg-gray-100 disabled:text-gray-500 ${
-                                showSeismicValidationError && !data.apiKey 
-                                  ? 'border-red-500 focus:border-red-500' 
-                                  : 'border-orange-200 focus:border-orange-400'
-                              }`}
+                      <Card className="max-w-md mx-auto">
+                        <CardHeader>
+                          <CardTitle className="text-lg text-center">Seismic Data Form</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-3 items-center text-sm font-medium">
+                            <div className="text-right pr-2 text-muted-foreground">Designer</div>
+                            <Input 
+                              value={data.designer || ''} 
+                              onChange={e => handleChange('designer', e.target.value)} 
+                              className="h-8"
                             />
+                            <div className="text-right pr-2 text-muted-foreground">Address *</div>
+                            <Input 
+                              value={data.address || ''} 
+                              onChange={e => handleChange('address', e.target.value)} 
+                              placeholder="Enter the address"
+                              className={`h-8 ${showSeismicValidationError && !data.address ? 'border-destructive' : ''}`}
+                            />
+                            <div className="text-right pr-2 text-muted-foreground">Project #</div>
+                            <Input 
+                              value={data.project || ''} 
+                              onChange={e => handleChange('project', e.target.value)} 
+                              className="h-8"
+                            />
+                            <div className="text-right pr-2 text-muted-foreground">Revision</div>
+                            <Input 
+                              value={data.revision || ''} 
+                              onChange={e => handleChange('revision', e.target.value)} 
+                              className="h-8"
+                            />
+                            <div className="text-right pr-2 text-muted-foreground">Date</div>
+                            <Input 
+                              value={data.date || ''} 
+                              onChange={e => handleChange('date', e.target.value)} 
+                              className="h-8"
+                            />
+                            <div className="text-right pr-2 text-muted-foreground">Bldg code</div>
+                            <Input 
+                              value={data.bldgCode || ''} 
+                              onChange={e => handleChange('bldgCode', e.target.value)} 
+                              className="h-8"
+                            />
+                            <div className="text-right pr-2 text-muted-foreground">Api_key *</div>
+                            {hasStoredApiKey ? (
+                              <div className="relative">
+                                <Input
+                                  type="text"
+                                  value="Securely stored - no need to enter"
+                                  disabled={true}
+                                  className="bg-green-50 border-green-300 text-green-700 cursor-not-allowed"
+                                />
+                              </div>
+                            ) : (
+                              <Input
+                                type="password"
+                                value={data.apiKey || ''}
+                                onChange={(e) => handleChange('apiKey', e.target.value)}
+                                placeholder="Enter your API key"
+                                disabled={apiKeyLoading}
+                                className={`h-8 ${
+                                  showSeismicValidationError && !data.apiKey 
+                                    ? 'border-destructive' 
+                                    : ''
+                                }`}
+                              />
+                            )}
+                          </div>
+                          
+                          {/* API Key Status Note */}
+                          {hasStoredApiKey && (
+                            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                              <div className="text-xs text-green-600 text-center">
+                                ✓ API key securely stored - can be managed in Settings
+                              </div>
+                            </div>
                           )}
                           
-                        </div>
-                        
-                        {/* API Key Status Note - moved outside the grid for better positioning */}
-                        {hasStoredApiKey && (
-                          <div className="text-xs text-green-600 text-center mt-4 mb-3 px-4 py-2 bg-green-50 rounded border border-green-200">
-                            ✓ API key securely stored - can be managed in Settings
+                          {/* API Key Options - only show when no key is stored */}
+                          {!hasStoredApiKey && (
+                            <div className="flex items-center justify-center space-x-2 mt-4">
+                              <input
+                                type="checkbox"
+                                id="remember-key"
+                                checked={rememberApiKey}
+                                onChange={(e) => setRememberApiKey(e.target.checked)}
+                                disabled={apiKeyLoading}
+                                className="rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              <label htmlFor="remember-key" className="text-sm text-muted-foreground">
+                                Remember my API key securely
+                              </label>
+                              <Button
+                                type="button"
+                                variant="link"
+                                onClick={() => setShowSecurityInfoModal(true)}
+                                disabled={apiKeyLoading}
+                                className="text-sm p-0 h-auto"
+                              >
+                                Learn more about security
+                              </Button>
+                            </div>
+                          )}
+                          
+                          {/* Required Fields Note */}
+                          <div className="text-xs text-muted-foreground text-center mt-4">
+                            * Required fields
                           </div>
-                        )}
-                        
-                        {/* API Key Options - only show when no key is stored */}
-                        {!hasStoredApiKey && (
-                          <div className="flex items-center justify-center space-x-2 mt-2 mb-2">
-                            <input
-                              type="checkbox"
-                              id="remember-key"
-                              checked={rememberApiKey}
-                              onChange={(e) => setRememberApiKey(e.target.checked)}
-                              disabled={apiKeyLoading}
-                              className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                            />
-                            <label htmlFor="remember-key" className="text-sm text-gray-700">
-                              Remember my API key securely
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => setShowSecurityInfoModal(true)}
-                              className="text-blue-600 text-sm hover:text-blue-800 underline"
-                              disabled={apiKeyLoading}
-                            >
-                              Learn more about security
-                            </button>
-                          </div>
-                        )}
-                        
-                        {/* Required Fields Note */}
-                        <div className="text-xs text-gray-500 text-center mt-2">
-                          * Required fields
-                        </div>
-                        
-                        {/* Retrieve Data Button */}
-                        <div className="flex justify-center mt-6">
-                          <button
-                            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
-                            style={{ minWidth: '180px' }}
-                            onClick={async () => {
-                              setSeismicFormError("");
-                              setSeismicResults(prev => ({
-                                ...prev,
-                                [tabKey]: null
-                              }));
-                              if (!data.address || (!data.apiKey && !hasStoredApiKey)) {
-                                setSeismicFormError("Address and API key are required.");
-                                setShowSeismicValidationError(true);
-                                return;
-                              }
-                              setShowSeismicValidationError(false);
-                              let currentSedimentTypes = sedimentTypes;
-                              if (currentSedimentTypes.length === 0) {
+                          
+                          {/* Retrieve Data Button */}
+                          <div className="flex justify-center mt-6">
+                            <Button
+                              onClick={async () => {
+                                setSeismicFormError("");
+                                setSeismicResults(prev => ({
+                                  ...prev,
+                                  [tabKey]: null
+                                }));
+                                if (!data.address || (!data.apiKey && !hasStoredApiKey)) {
+                                  setSeismicFormError("Address and API key are required.");
+                                  setShowSeismicValidationError(true);
+                                  return;
+                                }
+                                setShowSeismicValidationError(false);
+                                let currentSedimentTypes = sedimentTypes;
+                                if (currentSedimentTypes.length === 0) {
                                 try {
                                   setLoadingSediments(true);
                                   const res = await fetch("http://localhost:8080/api/sediment-types");
@@ -6170,9 +6109,10 @@ export default function HomePage() {
                             }}
                           >
                             {loadingSediments ? 'Loading...' : 'Retrieve Data'}
-                          </button>
-                          <button
-                            className="bg-gray-400 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-500 transition ml-4"
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="ml-4"
                             style={{ minWidth: '120px' }}
                             onClick={async () => {
                               setSeismicResults(prev => ({
@@ -6207,7 +6147,7 @@ export default function HomePage() {
                             }}
                           >
                             Clear Data
-                          </button>
+                          </Button>
                         </div>
                         {/* After the Retrieve Data button and before the sedimentTypes table, render the new info and seismic hazard table: */}
                         {seismicResult && (
@@ -6325,7 +6265,8 @@ export default function HomePage() {
                             );
                           })()}
                         </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     );
                   }
                   
@@ -6345,7 +6286,7 @@ export default function HomePage() {
                           <div className="getting-started">
                             <h3 className="text-lg font-semibold text-gray-800 mb-3">Getting Started:</h3>
                             <ol className="list-decimal list-inside space-y-2 text-gray-600">
-                              <li>Create a new tab using the "+" button</li>
+                              <li>Create a new tab using the &quot;+&quot; button</li>
                               <li>Select the appropriate calculator type</li>
                               <li>Enter your project parameters</li>
                               <li>Review the calculated results</li>
@@ -6388,160 +6329,172 @@ export default function HomePage() {
 
       {/* Context Menu */}
       {contextMenu.show && (
-        <div
-          className="fixed bg-white border border-gray-200 rounded-md shadow-lg py-1 z-50"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.type === 'project' && (
-            <>
-              <button
-                onClick={() => handleContextMenuAction('rename')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
-              >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Rename</span>
-              </button>
-              <button
-                onClick={() => handleContextMenuAction('copy')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
-              >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <span>Copy</span>
-              </button>
-              <button
-                onClick={() => handleContextMenuAction('delete')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
-              >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span>Delete</span>
-              </button>
-              <button
-                onClick={() => handleContextMenuAction('newPage')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
-              >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>New Page</span>
-              </button>
-            </>
-          )}
+        <Card className="fixed z-50 py-1" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <CardContent className="p-0">
+            {contextMenu.type === 'project' && (
+              <>
+                <Button
+                  onClick={() => handleContextMenuAction('rename')}
+                  variant="ghost"
+                  className="w-full justify-start px-4 py-2 h-auto"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Rename</span>
+                </Button>
+                <Button
+                  onClick={() => handleContextMenuAction('copy')}
+                  variant="ghost"
+                  className="w-full justify-start px-4 py-2 h-auto"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span>Copy</span>
+                </Button>
+                <Button
+                  onClick={() => handleContextMenuAction('delete')}
+                  variant="ghost"
+                  className="w-full justify-start px-4 py-2 h-auto"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete</span>
+                </Button>
+                <Button
+                  onClick={() => handleContextMenuAction('newPage')}
+                  variant="ghost"
+                  className="w-full justify-start px-4 py-2 h-auto"
+                >
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Page</span>
+                </Button>
+              </>
+            )}
           
           {contextMenu.type === 'page' && (
             <>
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('rename')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 <span>Rename</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => handleContextMenuAction('copy')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <span>Copy</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => handleContextMenuAction('delete')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
                 <span>Delete</span>
-              </button>
+              </Button>
               
               {clipboard.type && (
-                <button
+                <Button
                   onClick={() => handleContextMenuAction('paste')}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  variant="ghost"
+                  className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>Paste Tab</span>
-                </button>
+                </Button>
               )}
             </>
           )}
           
           {contextMenu.type === 'tab' && (
             <>
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('rename')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 <span>Rename</span>
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('copy')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <span>Copy this tab</span>
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('copyToClipboard')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <span>Copy to Clipboard</span>
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('cutToClipboard')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
                 <span>Cut to Clipboard</span>
-              </button>
+              </Button>
               
-              {clipboard.type && (
-                <button
-                  onClick={() => handleContextMenuAction('pasteAfterThisTab')}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
-                >
-                  <svg style={{ width: '14px', height: '14px' }} className="text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Paste after this tab</span>
-                </button>
-              )}
+                              {clipboard.type && (
+                  <Button
+                    onClick={() => handleContextMenuAction('pasteAfterThisTab')}
+                    variant="ghost"
+                    className="w-full justify-start px-4 py-2 h-auto"
+                  >
+                    <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Paste after this tab</span>
+                  </Button>
+                )}
               
               <div className="border-t border-gray-200 my-1"></div>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('newTabRight')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 <span>New Tab to the Right</span>
-              </button>
+              </Button>
               
               {(() => {
                 const { projectId, pageId } = selectedPage;
@@ -6549,86 +6502,94 @@ export default function HomePage() {
                 const page = project?.pages.find(p => p.id === pageId);
                 const tab = page?.tabs.find(t => t.id === contextMenu.itemId);
                 return tab?.locked ? (
-                  <button
+                  <Button
                     onClick={() => handleContextMenuAction('unlockTab')}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                    variant="ghost"
+                    className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                     </svg>
                     <span>Unlock Tab</span>
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => handleContextMenuAction('lockTab')}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                    variant="ghost"
+                    className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                     <span>Lock Tab</span>
-                  </button>
+                  </Button>
                 );
               })()}
               
               <div className="border-t border-gray-200 my-1"></div>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('moveToStart')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                 </svg>
                 <span>Move to Start</span>
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('moveToEnd')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
                 <span>Move to End</span>
-              </button>
+              </Button>
               
               <div className="border-t border-gray-200 my-1"></div>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('closeOthers')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 <span>Close Other Tabs</span>
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('closeAll')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 <span>Close All Tabs</span>
-              </button>
+              </Button>
               
               <div className="border-t border-gray-200 my-1"></div>
               
-              <button
+              <Button
                 onClick={() => handleContextMenuAction('closeThisTab')}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-red-100 flex items-center space-x-2 text-red-600"
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto hover:bg-red-100 text-red-600"
               >
                 <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 <span>Close this tab</span>
-              </button>
+              </Button>
             </>
           )}
-        </div>
+        </CardContent>
+      </Card>
       )}
 
       {/* Security Info Modal */}
@@ -6650,14 +6611,16 @@ export default function HomePage() {
               <h3 className="text-lg font-semibold text-gray-900">
                 API Key Security
               </h3>
-              <button
+              <Button
                 onClick={() => setShowSecurityInfoModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition"
+                variant="ghost"
+                size="sm"
+                className="text-gray-400 hover:text-gray-600"
               >
                 <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              </button>
+              </Button>
             </div>
             
             <div className="flex items-center mb-4">
@@ -6677,12 +6640,11 @@ export default function HomePage() {
             </div>
             
             <div className="flex justify-center">
-              <button
+              <Button
                 onClick={() => setShowSecurityInfoModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
               >
                 OK
-              </button>
+              </Button>
             </div>
           </div>
         </div>

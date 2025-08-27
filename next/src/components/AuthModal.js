@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 export default function AuthModal({
   isLogin,
@@ -10,69 +14,77 @@ export default function AuthModal({
   username, email, password, confirmPassword
 }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-8">
-        <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">
-          {isLogin ? 'Log in' : 'Register'}
-        </h2>
-        <form onSubmit={onSubmit} className="space-y-4">
-          {!isLogin && (
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-          {!isLogin && (
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          )}
-          {errorMessage && (
-            <p className="text-red-500 text-center text-sm">{errorMessage}</p>
-          )}
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-          >
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-center">
             {isLogin ? 'Log in' : 'Register'}
-          </button>
-        </form>
-        <div className="mt-4 text-center space-y-2">
-          <button
-            onClick={onToggle}
-            className="text-blue-600 hover:underline text-sm block"
-          >
-            {isLogin ? 'No account? Register here' : 'Have an account? Log in'}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:underline text-sm block"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogTitle>
+        </DialogHeader>
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={onSubmit} className="space-y-4">
+              {!isLogin && (
+                <Input
+                  type="text"
+                  placeholder="Username"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  className="w-full"
+                />
+              )}
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full"
+              />
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full"
+              />
+              {!isLogin && (
+                <Input
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  className="w-full"
+                />
+              )}
+              {errorMessage && (
+                <p className="text-destructive text-center text-sm">{errorMessage}</p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+              >
+                {isLogin ? 'Log in' : 'Register'}
+              </Button>
+            </form>
+            <div className="mt-4 text-center space-y-2">
+              <Button
+                onClick={onToggle}
+                variant="link"
+                className="text-sm"
+              >
+                {isLogin ? 'No account? Register here' : 'Have an account? Log in'}
+              </Button>
+              <Button
+                onClick={onClose}
+                variant="ghost"
+                className="text-sm text-muted-foreground"
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

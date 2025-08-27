@@ -109,7 +109,17 @@ docker-compose logs frontend
 
 ### Common Issues
 
-#### 1. Port Already in Use
+#### 1. Tailwind CSS v3 vs v4 Compatibility Issues
+```bash
+# If you encounter styling issues with shadcn/ui components:
+# - Ensure you're using Tailwind CSS v3.4.17 (not v4)
+# - Check that postcss.config.mjs uses v3 syntax:
+#   plugins: { tailwindcss: {}, autoprefixer: {} }
+# - Verify globals.css doesn't contain v4-specific syntax
+# - Run: npm install tailwindcss@^3.4.17
+```
+
+#### 2. Port Already in Use
 ```bash
 # Check what's using the ports
 netstat -ano | findstr :3000
