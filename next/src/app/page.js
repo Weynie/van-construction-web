@@ -6,12 +6,14 @@ import { userService } from '../services/userService';
 import { workspaceStateService } from '../services/workspaceStateService';
 import { tabTemplateService } from '../services/tabTemplateService';
 import { workspaceApiService } from '../services/workspaceApiService';
+
 import ApiKeyInput from '../components/ApiKeyInput';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
@@ -19,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { ModeToggle } from '@/components/mode-toggle';
+import { useTheme } from 'next-themes';
 
 // Add CSS for hiding scrollbars
 const scrollbarHideStyles = `
@@ -129,6 +132,15 @@ export default function HomePage() {
   
   // Settings modal state
   const [selectedSettingCategory, setSelectedSettingCategory] = useState('general');
+  const { theme, setTheme } = useTheme();
+  const [settingsTheme, setSettingsTheme] = useState(theme || 'system');
+
+  // Sync settings theme with actual theme
+  useEffect(() => {
+    if (theme) {
+      setSettingsTheme(theme);
+    }
+  }, [theme]);
   
   // API key decryption modal state for seismic template
   const [showSeismicDecryptModal, setShowSeismicDecryptModal] = useState(false);
@@ -186,6 +198,8 @@ export default function HomePage() {
     };
     
     checkAuthentication();
+    
+
   }, []);
 
   // Update current tab type when active tab changes (prevents dropdown flickering)
@@ -3138,9 +3152,6 @@ export default function HomePage() {
         <div className="min-h-screen bg-background">
           {/* Top bar */}
           <div className="flex justify-between items-center p-6 max-w-7xl mx-auto">
-            <span className="text-xl font-semibold">
-              Welcome to Our Platform
-            </span>
           </div>
 
           {/* Main content area */}
@@ -3611,15 +3622,15 @@ export default function HomePage() {
             
             {/* Settings Modal */}
             <Dialog open={showSettingsDropdown} onOpenChange={setShowSettingsDropdown}>
-              <DialogContent className="w-[900px] h-[600px] flex flex-col p-0">
+              <DialogContent className="!w-[50vw] !max-w-none h-[600px] flex flex-col p-0">
                 <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4 px-6 pt-6">
                   <DialogTitle>Settings</DialogTitle>
                 </DialogHeader>
                 
                 {/* Content Area */}
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 overflow-hidden rounded-b-lg">
                     {/* Left Sidebar - Categories */}
-                    <div className="w-64 bg-muted border-r border-border p-4">
+                    <div className="w-72 bg-muted border-r border-border p-4 rounded-bl-lg">
                       <div className="space-y-1">
                         {/* General */}
                         <Button
@@ -3642,9 +3653,13 @@ export default function HomePage() {
                         <Button
                           onClick={() => setSelectedSettingCategory('notifications')}
                           variant={selectedSettingCategory === 'notifications' ? 'secondary' : 'ghost'}
-                          className="w-full justify-start"
+                          className={`w-full justify-start ${
+                            selectedSettingCategory === 'notifications' 
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'notifications' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.19 4.19A2 2 0 004 6v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-1.81 1.19z" />
                           </svg>
                           <span>Notifications</span>
@@ -3654,9 +3669,13 @@ export default function HomePage() {
                         <Button
                           onClick={() => setSelectedSettingCategory('personalization')}
                           variant={selectedSettingCategory === 'personalization' ? 'secondary' : 'ghost'}
-                          className="w-full justify-start"
+                          className={`w-full justify-start ${
+                            selectedSettingCategory === 'personalization' 
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'personalization' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
                           </svg>
                           <span>Personalization</span>
@@ -3666,9 +3685,13 @@ export default function HomePage() {
                         <Button
                           onClick={() => setSelectedSettingCategory('data')}
                           variant={selectedSettingCategory === 'data' ? 'secondary' : 'ghost'}
-                          className="w-full justify-start"
+                          className={`w-full justify-start ${
+                            selectedSettingCategory === 'data' 
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'data' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z" />
                           </svg>
                           <span>Data Controls</span>
@@ -3678,9 +3701,13 @@ export default function HomePage() {
                         <Button
                           onClick={() => setSelectedSettingCategory('security')}
                           variant={selectedSettingCategory === 'security' ? 'secondary' : 'ghost'}
-                          className="w-full justify-start"
+                          className={`w-full justify-start ${
+                            selectedSettingCategory === 'security' 
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'security' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                           </svg>
                           <span>Security</span>
@@ -3690,9 +3717,13 @@ export default function HomePage() {
                         <Button
                           onClick={() => setSelectedSettingCategory('account')}
                           variant={selectedSettingCategory === 'account' ? 'secondary' : 'ghost'}
-                          className="w-full justify-start"
+                          className={`w-full justify-start ${
+                            selectedSettingCategory === 'account' 
+                              ? 'bg-accent text-accent-foreground hover:bg-accent/80' 
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className="mr-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'account' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                           <span>Account</span>
@@ -3701,19 +3732,32 @@ export default function HomePage() {
                     </div>
                     
                     {/* Right Content Area */}
-                    <div className="flex-1 p-6 overflow-y-auto bg-background">
+                    <div className="flex-1 p-8 overflow-y-auto bg-background min-w-0 rounded-br-lg">
                       {selectedSettingCategory === 'general' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-foreground mb-6">General</h4>
-                          <div className="space-y-6">
+                          <h4 className="text-lg font-semibold text-foreground mb-8">General</h4>
+                          <div className="space-y-8">
                             {/* Theme */}
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-foreground">Theme</span>
-                              <select className="px-3 py-1 text-sm border border-input rounded-md bg-background text-foreground">
-                                <option>System</option>
-                                <option>Light</option>
-                                <option>Dark</option>
-                              </select>
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-foreground">Theme</span>
+                              </div>
+                              <Select 
+                                value={settingsTheme} 
+                                onValueChange={(value) => {
+                                  setSettingsTheme(value);
+                                  setTheme(value);
+                                }}
+                              >
+                                <SelectTrigger className="w-[180px] flex-shrink-0">
+                                  <SelectValue placeholder="Select theme" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="light">Light</SelectItem>
+                                  <SelectItem value="dark">Dark</SelectItem>
+                                  <SelectItem value="system">System</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                             
 
@@ -3723,8 +3767,8 @@ export default function HomePage() {
                       
                       {selectedSettingCategory === 'security' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-foreground mb-6">Security</h4>
-                          <div className="space-y-6">
+                          <h4 className="text-lg font-semibold text-foreground mb-8">Security</h4>
+                          <div className="space-y-8">
                             {/* Success/Error Messages */}
                             {apiKeySuccess && (
                               <div className="bg-green-50 border border-green-200 rounded-md p-3">
@@ -3748,13 +3792,21 @@ export default function HomePage() {
                             )}
                             
                             {/* API Key Management */}
-                            <div className="bg-muted rounded-lg p-4 border border-border">
-                              <h5 className="text-sm font-semibold text-foreground mb-4">API Key Management</h5>
+                            <div className="bg-muted rounded-lg p-6 border border-border">
+                              <h5 className="text-sm font-semibold text-foreground mb-6">API Key Management</h5>
+                              <p className="text-xs text-muted-foreground mb-6 max-w-4xl">
+                                Your API key enables access to seismic data services and is stored securely on your device.
+                              </p>
                               
                               {/* Status */}
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-sm text-foreground">Status:</span>
-                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                              <div className="flex items-center justify-between gap-4 mb-4">
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium text-foreground">Status</span>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Current state of your API key storage and authentication
+                                  </p>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${
                   hasStoredApiKey 
                     ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' 
                     : 'bg-muted text-muted-foreground border border-border'
@@ -3765,18 +3817,33 @@ export default function HomePage() {
                               
                               {/* Details */}
                               {hasStoredApiKey && apiKeyStatus && (
-                                <div className="text-xs text-muted-foreground space-y-1 mb-4">
-                                  <div>Last used: {apiKeyStatus.lastUsedAt ? new Date(apiKeyStatus.lastUsedAt).toLocaleDateString() : 'Never'}</div>
-                                  <div>Created: {apiKeyStatus.createdAt ? new Date(apiKeyStatus.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                                <div className="bg-background/50 rounded-md p-4 mb-6">
+                                  <h6 className="text-xs font-medium text-foreground mb-3">Key Information</h6>
+                                  <div className="text-xs text-muted-foreground space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                      <span className="min-w-0 flex-1">Last used:</span>
+                                      <span className="font-medium ml-4">{apiKeyStatus.lastUsedAt ? new Date(apiKeyStatus.lastUsedAt).toLocaleDateString() : 'Never'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="min-w-0 flex-1">Created:</span>
+                                      <span className="font-medium ml-4">{apiKeyStatus.createdAt ? new Date(apiKeyStatus.createdAt).toLocaleDateString() : 'Unknown'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="min-w-0 flex-1">Storage:</span>
+                                      <span className="font-medium text-green-600 dark:text-green-400 ml-4">Encrypted on device</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                               
-                              {/* Action Button */}
+                                                            {/* Action Button */}
                               {hasStoredApiKey ? (
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                                    <div className="text-sm font-medium text-foreground">API Key</div>
-                <div className="text-xs text-muted-foreground">Securely stored</div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-foreground">API Key</div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      Your API key is securely stored and used automatically for data requests.
+                                    </div>
                                   </div>
                                   <Button 
                                     onClick={() => {
@@ -3785,6 +3852,7 @@ export default function HomePage() {
                                     }}
                                     variant="destructive"
                                     size="sm"
+                                    className="flex-shrink-0"
                                   >
                                     Delete
                                   </Button>
@@ -3797,16 +3865,19 @@ export default function HomePage() {
                             </div>
                             
                             {/* Data Encryption */}
-                            <div className="bg-green-100 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                              <h5 className="text-sm font-semibold text-green-800 dark:text-green-400 mb-4">Data Encryption</h5>
+                            <div className="bg-green-100 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
+                              <h5 className="text-sm font-semibold text-green-800 dark:text-green-400 mb-6">Data Encryption</h5>
+                              <p className="text-xs text-green-700 dark:text-green-300 mb-6 max-w-4xl">
+                                All your workspace data is automatically encrypted and secure.
+                              </p>
                               
                               <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium text-green-700 dark:text-green-300">Tab Data Encryption</div>
                                     <div className="text-xs text-green-600 dark:text-green-400">Automatic encryption using your login password</div>
                                   </div>
-                                  <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md">
+                                  <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md flex-shrink-0">
                                     ✓ Active
                                   </span>
                                 </div>
@@ -3815,25 +3886,27 @@ export default function HomePage() {
                                   🔒 All tab data is automatically encrypted with your login password. No manual action required.
                                 </div>
                                 
-                                <div className="text-xs text-green-600 dark:text-green-400 space-y-1">
-                                  <div>• Automatic AES-256 encryption with your password</div>
-                                  <div>• Seamless encryption/decryption on login</div>
-                                  <div>• Each data record has a unique salt</div>
-                                  <div>• No performance impact on normal usage</div>
+                                <div className="text-xs text-green-600 dark:text-green-400">
+                                  Your data is protected with industry-standard encryption.
                                 </div>
                               </div>
                             </div>
                             
                             {/* Password Management */}
-                            <div className="bg-muted rounded-lg p-4 border border-border">
-                              <h5 className="text-sm font-semibold text-foreground mb-4">Password Management</h5>
+                            <div className="bg-muted rounded-lg p-6 border border-border">
+                              <h5 className="text-sm font-semibold text-foreground mb-6">Password Management</h5>
+                              <p className="text-xs text-muted-foreground mb-6 max-w-4xl">
+                                Manage your account password and security settings.
+                              </p>
                               
-                              <div className="flex items-center justify-between">
-                                <div>
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-foreground">Password</div>
-                                  <div className="text-xs text-muted-foreground">Last changed: 3 months ago</div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Your password secures your account and data.
+                                  </div>
                                 </div>
-                                <Button size="sm">
+                                <Button size="sm" className="flex-shrink-0">
                                   Change
                                 </Button>
                               </div>
@@ -3847,17 +3920,25 @@ export default function HomePage() {
                       {/* Account Settings */}
                       {selectedSettingCategory === 'account' && (
                         <div>
-                          <h4 className="text-lg font-semibold text-foreground mb-6">Account</h4>
-                          <div className="space-y-6">
-                            {/* User ID Display and Edit */}
-                            <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
-                              <h5 className="text-sm font-semibold text-primary mb-4">User Information</h5>
-                              
-                              <div className="space-y-3">
+                          <h4 className="text-lg font-semibold text-foreground mb-8">Account</h4>
+                          <div className="space-y-8">
+                                                          {/* User ID Display and Edit */}
+                              <div className="bg-primary/10 rounded-lg p-6 border border-primary/20">
+                                <h5 className="text-sm font-semibold text-primary mb-6">User Information</h5>
+                                <p className="text-xs text-primary/70 mb-6 max-w-4xl">
+                                  Manage your account information and authentication status.
+                                </p>
+                                
+                                <div className="space-y-4">
                                 
                                 {/* Username (Editable) */}
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm text-primary">Username:</span>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-primary">Username</span>
+                                    <p className="text-xs text-primary/70 mt-1">
+                                      Your display name used throughout the application
+                                    </p>
+                                  </div>
                                   <div className="flex items-center space-x-2">
                                     <span className="text-sm font-medium text-foreground">{username || 'Not set'}</span>
                                     {isAuthenticated && (
@@ -3886,7 +3967,12 @@ export default function HomePage() {
                                 
                                 {/* Authentication Status */}
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm text-primary">Status:</span>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-primary">Authentication Status</span>
+                                    <p className="text-xs text-primary/70 mt-1">
+                                      Current state of your account authentication and session
+                                    </p>
+                                  </div>
                                                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                   isAuthenticated 
                     ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
@@ -4318,7 +4404,7 @@ export default function HomePage() {
                     <div
                       key={tab.id}
                       className={`flex items-center px-4 py-2 border-r border-border cursor-pointer group ${
-                        (tab.isActive || tab.active) ? 'bg-primary/10 border-b-2 border-primary' : 'hover:bg-accent'
+                        (tab.isActive || tab.active) ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-accent'
                       } ${
                         isDragging && draggedTab === tab.id ? 'opacity-50' : ''
                       } ${
@@ -4640,22 +4726,25 @@ export default function HomePage() {
                   </svg>
                   <span>{activeTabForDisplay?.name || 'Welcome'}</span>
                 </h2>
-                <select 
-                  className="px-3 py-1 border border-input rounded-md text-sm flex items-center space-x-2 bg-background text-foreground hover:border-ring focus:border-ring focus:outline-none transition-colors"
+                <Select 
                   value={currentTabType}
-                  onChange={(e) => {
+                  onValueChange={(value) => {
                     // Only handle change if there's an active tab and a valid selection (not empty string)
-                    if (activeTabForDisplay && e.target.value && e.target.value !== '') {
-                      handleTabTypeChange(activeTabForDisplay.id, e.target.value);
+                    if (activeTabForDisplay && value && value !== '') {
+                      handleTabTypeChange(activeTabForDisplay.id, value);
                     }
                   }}
                 >
-                  <option value="">Select tab type...</option>
-                  <option value="Design Tables">Design Tables</option>
-                  <option value="Snow Load">Snow Load</option>
-                  <option value="Wind Load">Wind Load</option>
-                  <option value="Seismic Template">Seismic Template</option>
-                </select>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select tab type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Design Tables">Design Tables</SelectItem>
+                    <SelectItem value="Snow Load">Snow Load</SelectItem>
+                    <SelectItem value="Wind Load">Wind Load</SelectItem>
+                    <SelectItem value="Seismic Template">Seismic Template</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
                               <div className="text-muted-foreground">
@@ -4909,22 +4998,26 @@ export default function HomePage() {
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Location</label>
-                                <select 
-                                  className="col-span-2 px-2 py-1 border rounded text-sm"
+                                <Select 
                                   value={data.location}
-                                  onChange={e => handleSnowChange('location', e.target.value)}
+                                  onValueChange={(value) => handleSnowChange('location', value)}
                                 >
-                                  {snowLoadData.map(item => (
-                                    <option key={item.id} value={item.city}>{item.city}</option>
-                                  ))}
-                                </select>
+                                  <SelectTrigger className="col-span-2 h-8">
+                                    <SelectValue placeholder="Select location..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {snowLoadData.map(item => (
+                                      <SelectItem key={item.city} value={item.city}>{item.city}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Slope</label>
-                                <Input 
+                                <input 
                                   type="number" 
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.slope}
                                   onChange={e => handleSnowChange('slope', parseFloat(e.target.value) || 0)}
                                 />
@@ -4937,10 +5030,10 @@ export default function HomePage() {
 
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Is</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.is}
                                   onChange={e => handleSnowChange('is', parseFloat(e.target.value) || 0)}
                                 />
@@ -4949,10 +5042,10 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ca</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.ca}
                                   onChange={e => handleSnowChange('ca', parseFloat(e.target.value) || 0)}
                                 />
@@ -4961,10 +5054,10 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Cb</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.cb}
                                   onChange={e => handleSnowChange('cb', parseFloat(e.target.value) || 0)}
                                 />
@@ -5468,15 +5561,19 @@ export default function HomePage() {
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Location</label>
-                                <select 
-                                  className="col-span-2 px-2 py-1 border rounded text-sm"
+                                <Select 
                                   value={data.location}
-                                  onChange={e => handleWindChange('location', e.target.value)}
+                                  onValueChange={(value) => handleWindChange('location', value)}
                                 >
-                                  {windLoadData.map(item => (
-                                    <option key={item.id} value={item.city}>{item.city}</option>
-                                  ))}
-                                </select>
+                                  <SelectTrigger className="col-span-2 h-8">
+                                    <SelectValue placeholder="Select location..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {windLoadData.map(item => (
+                                      <SelectItem key={item.city} value={item.city}>{item.city}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                             </div>
                           </div>
@@ -5487,10 +5584,10 @@ export default function HomePage() {
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Iw</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.iw}
                                   onChange={e => handleWindChange('iw', parseFloat(e.target.value) || 0)}
                                 />
@@ -5498,10 +5595,10 @@ export default function HomePage() {
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ce</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.ce}
                                   onChange={e => handleWindChange('ce', parseFloat(e.target.value) || 0)}
                                 />
@@ -5509,10 +5606,10 @@ export default function HomePage() {
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ct</label>
-                                <Input 
+                                <input 
                                   type="number" 
                                   step="0.1"
-                                  className="h-8"
+                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   value={data.ct}
                                   onChange={e => handleWindChange('ct', parseFloat(e.target.value) || 0)}
                                 />
