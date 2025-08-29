@@ -1,24 +1,26 @@
 'use client';  // Important: enable client-side hooks in App Router
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { apiKeyService } from '../services/apiKeyService';
 import { userService } from '../services/userService';
 import { workspaceStateService } from '../services/workspaceStateService';
 import { tabTemplateService } from '../services/tabTemplateService';
 import { workspaceApiService } from '../services/workspaceApiService';
 
-import ApiKeyInput from '../components/ApiKeyInput';
+import SeismicResultsTable from '../components/SeismicResultsTable';
+import SedimentTypesTable from '../components/SedimentTypesTable';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
 import { ModeToggle } from '@/components/mode-toggle';
 import { useTheme } from 'next-themes';
@@ -148,6 +150,12 @@ export default function HomePage() {
   const [seismicDecryptError, setSeismicDecryptError] = useState('');
   const [seismicDecryptLoading, setSeismicDecryptLoading] = useState(false);
   const [pendingSeismicData, setPendingSeismicData] = useState(null);
+  
+  // Username edit dialog state
+  const [showUsernameDialog, setShowUsernameDialog] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [usernameDialogError, setUsernameDialogError] = useState('');
+  const [usernameLoading, setUsernameLoading] = useState(false);
   
 
   
@@ -1941,7 +1949,7 @@ export default function HomePage() {
               };
               console.log('🔍 Saving seismic results to database (decrypt path):', seismicResultsDelta);
               console.log('🔍 Using tab ID:', tabId);
-              await workspaceStateService.saveTabDataImmediately(tabId, 'seismic', seismicResultsDelta);
+              await workspaceStateService.saveTabDataEncryptedImmediately(tabId, 'seismic', seismicResultsDelta, userPassword);
               console.log('✅ Seismic results saved successfully (decrypt path)');
             } catch (error) {
               console.error('❌ Error saving seismic results (decrypt path):', error);
@@ -2019,6 +2027,29 @@ export default function HomePage() {
       await checkApiKeyStatus();
     } catch (error) {
       // Error is already set in storeApiKey function
+    }
+  };
+
+  const handleUsernameUpdate = async () => {
+    if (!newUsername || !newUsername.trim()) {
+      setUsernameDialogError('Please enter a username');
+      return;
+    }
+
+    setUsernameLoading(true);
+    setUsernameDialogError('');
+
+    try {
+      const result = await userService.updateProfile(userId, newUsername.trim());
+      setUsername(newUsername.trim());
+      setShowUsernameDialog(false);
+      setNewUsername('');
+      showToastNotification('Username updated successfully!', 'success');
+    } catch (error) {
+      console.error('Failed to update username:', error);
+      setUsernameDialogError(error.message || 'Failed to update username');
+    } finally {
+      setUsernameLoading(false);
     }
   };
 
@@ -3867,28 +3898,13 @@ export default function HomePage() {
                             {/* Data Encryption */}
                             <div className="bg-green-100 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
                               <h5 className="text-sm font-semibold text-green-800 dark:text-green-400 mb-6">Data Encryption</h5>
-                              <p className="text-xs text-green-700 dark:text-green-300 mb-6 max-w-4xl">
-                                All your workspace data is automatically encrypted and secure.
-                              </p>
-                              
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between gap-4">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-medium text-green-700 dark:text-green-300">Tab Data Encryption</div>
-                                    <div className="text-xs text-green-600 dark:text-green-400">Automatic encryption using your login password</div>
-                                  </div>
-                                  <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md flex-shrink-0">
-                                    ✓ Active
-                                  </span>
-                                </div>
-                                
-                                <div className="text-xs text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 px-3 py-2 rounded-md">
-                                  🔒 All tab data is automatically encrypted with your login password. No manual action required.
-                                </div>
-                                
-                                <div className="text-xs text-green-600 dark:text-green-400">
-                                  Your data is protected with industry-standard encryption.
-                                </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <p className="text-xs text-green-700 dark:text-green-300">
+                                  All your workspace data is automatically encrypted and secure with industry-standard encryption.
+                                </p>
+                                <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md flex-shrink-0">
+                                  ✓ Active
+                                </span>
                               </div>
                             </div>
                             
@@ -3943,18 +3959,10 @@ export default function HomePage() {
                                     <span className="text-sm font-medium text-foreground">{username || 'Not set'}</span>
                                     {isAuthenticated && (
                                       <Button
-                                        onClick={async () => {
-                                          const newUsername = prompt('Enter new username:', username);
-                                          if (newUsername && newUsername.trim()) {
-                                            try {
-                                              const result = await userService.updateProfile(userId, newUsername.trim());
-                                              setUsername(newUsername.trim());
-                                              showToastNotification('Username updated successfully!', 'success');
-                                            } catch (error) {
-                                              console.error('Failed to update username:', error);
-                                              showToastNotification(error.message || 'Failed to update username', 'error');
-                                            }
-                                          }
+                                        onClick={() => {
+                                          setNewUsername(username || '');
+                                          setUsernameDialogError('');
+                                          setShowUsernameDialog(true);
                                         }}
                                         size="sm"
                                         title="Change Username"
@@ -3986,16 +3994,7 @@ export default function HomePage() {
                             
 
                             
-                            {/* Password */}
-                            <div className="flex items-center justify-between">
-                              <div>
-                                                <div className="text-sm font-medium text-foreground">Password</div>
-                <div className="text-xs text-muted-foreground">Last changed: 3 months ago</div>
-                              </div>
-                              <Button size="sm">
-                                Change
-                              </Button>
-                            </div>
+
                           </div>
                         </div>
                       )}
@@ -4036,7 +4035,7 @@ export default function HomePage() {
         {/* Project Sidebar */}
         <div 
           ref={sidebarRef}
-          className={`bg-card border-r border-border transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
+          className={`bg-card transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
           style={{ width: sidebarCollapsed ? '48px' : `${sidebarWidth}px` }}
         >
                       <div className="p-4 border-b border-border flex items-center justify-between">
@@ -4047,10 +4046,10 @@ export default function HomePage() {
                   onClick={addProject}
                   variant="ghost"
                   size="sm"
-                  className="p-1 hover:bg-blue-100 bg-blue-50"
+                  className="p-1 hover:bg-accent bg-accent/50"
                   title="New Project"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg style={{ width: '14px', height: '14px' }} className="text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                 </Button>
@@ -4076,12 +4075,12 @@ export default function HomePage() {
                   <div
                     className={`flex items-center justify-between p-2 rounded cursor-pointer group ${
                       selectedPage.projectId === project.id 
-                        ? 'bg-blue-100 border border-blue-300' 
-                        : 'hover:bg-blue-50'
+                        ? 'bg-accent border border-border' 
+                        : 'hover:bg-accent/50'
                     } ${
                       isDraggingProject && draggedProject === project.id ? 'opacity-50' : ''
                     } ${
-                      dragOverProject === project.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
+                      dragOverProject === project.id ? 'border-l-2 border-l-primary bg-accent' : ''
                     }`}
                     style={{ 
                       cursor: isDraggingProject ? 'grabbing' : 'grab'
@@ -4108,7 +4107,7 @@ export default function HomePage() {
                       {project.pages && project.pages.length > 0 && (
                         <svg 
                           style={{ width: '12px', height: '12px' }} 
-                          className={`text-gray-500 mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0 cursor-pointer hover:text-gray-700`} 
+                          className={`text-muted-foreground mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0 cursor-pointer hover:text-foreground`} 
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
@@ -4120,7 +4119,7 @@ export default function HomePage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       )}
-                      <svg style={{ width: '14px', height: '14px' }} className="text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg style={{ width: '14px', height: '14px' }} className="text-primary mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
                       {editingItem.type === 'project' && editingItem.id === project.id ? (
@@ -4136,7 +4135,7 @@ export default function HomePage() {
                               handleEditCancel();
                             }
                           }}
-                          className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                          className="text-sm text-foreground bg-background border border-input rounded px-1 py-0.5 focus:outline-none focus:border-ring flex-1 min-w-0"
                           autoFocus
                           onClick={(e) => e.stopPropagation()}
                         />
@@ -4145,8 +4144,8 @@ export default function HomePage() {
                           <span 
                             className={`text-sm block w-full ${
                               selectedPage.projectId === project.id 
-                                ? 'text-blue-800 font-semibold' 
-                                : 'text-gray-700'
+                                ? 'text-primary font-semibold' 
+                                : 'text-muted-foreground'
                             }`}
                             style={{
                               overflow: 'hidden',
@@ -4167,10 +4166,10 @@ export default function HomePage() {
                       }}
                       variant="ghost"
                       size="sm"
-                      className="p-1 opacity-0 group-hover:opacity-100 bg-green-50 hover:bg-green-100"
+                      className="p-1 opacity-0 group-hover:opacity-100 bg-green-100 hover:bg-green-200 dark:bg-green-900/20 dark:hover:bg-green-900/30"
                       title="Add Page"
                     >
-                      <svg style={{ width: '12px', height: '12px' }} className="text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg style={{ width: '12px', height: '12px' }} className="text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                     </Button>
@@ -4292,7 +4291,7 @@ export default function HomePage() {
                                     handleEditCancel();
                                   }
                                 }}
-                                className="text-xs text-gray-600 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                                className="text-xs text-foreground bg-background border border-input rounded px-1 py-0.5 focus:outline-none focus:border-ring flex-1 min-w-0"
                                 autoFocus
                               />
                             ) : (
@@ -4300,8 +4299,8 @@ export default function HomePage() {
                                 <span 
                                   className={`text-xs block w-full ${
                                     selectedPage.projectId === project.id && selectedPage.pageId === page.id 
-                                      ? 'text-green-800 font-semibold' 
-                                      : 'text-gray-600'
+                                      ? 'text-green-600 dark:text-green-400 font-semibold' 
+                                      : 'text-muted-foreground'
                                   }`}
                                   style={{
                                     overflow: 'hidden',
@@ -4368,6 +4367,9 @@ export default function HomePage() {
           )}
         </div>
 
+        {/* Vertical Separator */}
+        <Separator orientation="vertical" className="min-h-screen" />
+
         {/* Information Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tab Bar */}
@@ -4378,7 +4380,7 @@ export default function HomePage() {
                 onClick={scrollTabsLeft}
                 variant="ghost"
                 size="sm"
-                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 border-r border-border bg-card"
+                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 bg-card"
                 title="Scroll Left"
               >
                 <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4400,18 +4402,19 @@ export default function HomePage() {
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
                   const currentTabs = currentPage?.tabs || [];
                   
-                  return currentTabs.map(tab => (
-                    <div
-                      key={tab.id}
-                      className={`flex items-center px-4 py-2 border-r border-border cursor-pointer group ${
-                        (tab.isActive || tab.active) ? 'bg-blue-50 border-b-2 border-blue-500' : 'hover:bg-accent'
-                      } ${
-                        isDragging && draggedTab === tab.id ? 'opacity-50' : ''
-                      } ${
-                        dragOverTab === tab.id ? 'border-l-2 border-l-blue-500 bg-blue-100' : ''
-                      } ${
-                        tab.locked ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : ''
-                      }`}
+                  return currentTabs.map((tab, index) => (
+                    <React.Fragment key={tab.id}>
+                      {index > 0 && <Separator orientation="vertical" className="h-8" />}
+                      <div
+                        className={`flex items-center px-4 py-2 cursor-pointer group ${
+                          (tab.isActive || tab.active) ? 'bg-accent border-b-2 border-primary' : 'hover:bg-accent/50'
+                        } ${
+                          isDragging && draggedTab === tab.id ? 'opacity-50' : ''
+                        } ${
+                          dragOverTab === tab.id ? 'border-l-2 border-l-primary bg-accent' : ''
+                        } ${
+                          tab.locked ? 'bg-yellow-100 dark:bg-yellow-900/20 border-l-4 border-l-yellow-400 dark:border-l-yellow-500' : ''
+                        }`}
                       style={{ 
                         cursor: isDragging ? 'grabbing' : 'grab',
                         minWidth: '180px',
@@ -4449,14 +4452,18 @@ export default function HomePage() {
                                 handleEditCancel();
                               }
                             }}
-                            className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:border-blue-500 flex-1 min-w-0"
+                            className="text-sm text-foreground bg-background border border-input rounded px-1 py-0.5 focus:outline-none focus:border-ring flex-1 min-w-0"
                             autoFocus
                             onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <span 
-                              className="text-sm text-gray-700 block w-full flex items-center"
+                              className={`text-sm block w-full flex items-center ${
+                                (tab.isActive || tab.active) 
+                                  ? 'text-primary font-semibold' 
+                                  : 'text-muted-foreground'
+                              }`}
                               style={{
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -4477,22 +4484,23 @@ export default function HomePage() {
                           }}
                           variant="ghost"
                           size="sm"
-                          className="ml-2 p-1 opacity-0 group-hover:opacity-100 bg-red-50 hover:bg-red-100 flex-shrink-0"
+                          className="ml-2 p-1 opacity-0 group-hover:opacity-100 bg-red-100 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 flex-shrink-0"
                           title="Close Tab"
                         >
-                          <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '10px', height: '10px' }} className="text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </Button>
                       )}
                       {tab.locked && (
                         <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
-                          <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                           </svg>
                         </div>
                       )}
                     </div>
+                    </React.Fragment>
                   ));
                 })()}
               </div>
@@ -4504,7 +4512,7 @@ export default function HomePage() {
                 onClick={scrollTabsRight}
                 variant="ghost"
                 size="sm"
-                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 border-l border-border bg-card"
+                className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 bg-card"
                 title="Scroll Right"
               >
                 <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4514,7 +4522,7 @@ export default function HomePage() {
             )}
             
             {/* Fixed right side controls - positioned at far right edge */}
-            <div className="flex items-center flex-shrink-0 bg-card border-l border-border ml-auto">
+            <div className="flex items-center flex-shrink-0 bg-card ml-auto">
               {/* Tab Dropdown button */}
               <div className="relative">
                 <Button
@@ -4988,13 +4996,13 @@ export default function HomePage() {
 
                     return (
                       <>
-                        <div className="max-w-4xl mx-auto bg-blue-50 rounded-lg p-6 border border-blue-200">
-                        <h3 className="text-xl font-bold text-blue-800 mb-4">Snow Load Calculator 1.0 (ULS)</h3>
+                        <div className="max-w-4xl mx-auto bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800">
+                        <h3 className="text-xl font-bold text-blue-800 dark:text-blue-400 mb-4">Snow Load Calculator 1.0 (ULS)</h3>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           {/* Input Area */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-blue-700 mb-3">Input Area</h4>
+                          <div className="bg-card rounded-lg p-4 border border-border">
+                            <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-3">Input Area</h4>
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Location</label>
@@ -5015,53 +5023,62 @@ export default function HomePage() {
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Slope</label>
-                                <input 
-                                  type="number" 
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.slope}
-                                  onChange={e => handleSnowChange('slope', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleSnowChange('slope', value)}
+                                  min={0}
+                                  max={90}
+                                  step={1}
+                                  precision={0}
+                                  className="w-full"
                                 />
                                 <span className="text-sm">: 12</span>
                               </div>
 
                               <div>
-                                <h4 className="font-semibold text-blue-700 mb-3">Default Inputs</h4>
+                                <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-3">Default Inputs</h4>
                               </div>
 
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Is</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.is}
-                                  onChange={e => handleSnowChange('is', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleSnowChange('is', value)}
+                                  min={0}
+                                  max={2}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">normal=1; SLS → 0.9</span>
+                                <span className="text-xs text-muted-foreground">normal=1; SLS → 0.9</span>
                               </div>
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ca</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.ca}
-                                  onChange={e => handleSnowChange('ca', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleSnowChange('ca', value)}
+                                  min={0}
+                                  max={3}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">Ca = 1 for simple cases; complicated when consider particular situations</span>
+                                <span className="text-xs text-muted-foreground">Ca = 1 for simple cases; complicated when consider particular situations</span>
                               </div>
                               
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Cb</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.cb}
-                                  onChange={e => handleSnowChange('cb', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleSnowChange('cb', value)}
+                                  min={0}
+                                  max={2}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">(1) Cb=0.8 if smaller dimension of roof w≤35m (115'); (2) Cb=1.0 if roof height ≤ Limit. Height ≈ 2m (6.5'); (3) Otherwise, refer to the Code.</span>
+                                <span className="text-xs text-muted-foreground">(1) Cb=0.8 if smaller dimension of roof w≤35m (115'); (2) Cb=1.0 if roof height ≤ Limit. Height ≈ 2m (6.5'); (3) Otherwise, refer to the Code.</span>
                               </div>
                               
 
@@ -5073,51 +5090,57 @@ export default function HomePage() {
                           </div>
 
                           {/* Calculation Area */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-green-700 mb-3">Calculation Area</h4>
-                            <div className="space-y-0">
+                          <div className="bg-card rounded-lg p-4 border border-border">
+                            <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3">Calculation Area</h4>
+                            <div className="space-y-0 text-muted-foreground">
+                              <div className="grid grid-cols-3 gap-2 py-2">
+                                <span className="font-medium text-muted-foreground">Parameter</span>
+                                <span className="font-medium text-muted-foreground">Value</span>
+                                <span className="font-medium text-muted-foreground">Description</span>
+                              </div>
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Ss</span>
                                 <span className="font-mono">{ss.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">1-in-50-year ground snow load</span>
+                                <span className="text-xs">1-in-50-year ground snow load</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Sr</span>
                                 <span className="font-mono">{sr.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">1-in-50-year associated rain load</span>
+                                <span className="text-xs">1-in-50-year associated rain load</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">α</span>
                                 <span className="font-mono">{alpha.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">°</span>
+                                <span className="text-xs">°</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">γ</span>
                                 <span className="font-mono">{gamma.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">γ=min.&#123;4.0 kN/m³, 0.43Ss+2.2 kN/m³&#125;</span>
+                                <span className="text-xs">γ=min.&#123;4.0 kN/m³, 0.43Ss+2.2 kN/m³&#125;</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Limit. Height</span>
                                 <span className="font-mono">{limitHeight.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">= 1 + Ss/γ (m); if a mean height of roof is less than 1 + Ss/γ → Cb=1.</span>
+                                <span className="text-xs">= 1 + Ss/γ (m); if a mean height of roof is less than 1 + Ss/γ → Cb=1.</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Cw</span>
                                 <span className="font-mono">{Number(driftData.Cw).toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">Conservative</span>
+                                <span className="text-xs">Conservative</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Cs</span>
                                 <span className="font-mono">{cs.toFixed(2)}</span>
-                                <span className="text-xs text-gray-600">Cs=1.0 where α≤30°; (70°-α)/40° where 30°&lt;α≤70°; 0 where α&gt;70°</span>
+                                <span className="text-xs">Cs=1.0 where α≤30°; (70°-α)/40° where 30°&lt;α≤70°; 0 where α&gt;70°</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 py-2">
                                 <span className="font-medium">Ss(CbCwCsCa)</span>
                                 <span className="font-mono">{ssCombined.toFixed(2)}</span>
@@ -5127,335 +5150,359 @@ export default function HomePage() {
                           </div>
                         </div>
 
-                        {/* Results */}
-                                                  <div className="mt-6 bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                          <h4 className="font-semibold text-yellow-800 mb-3">Results</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="grid grid-cols-3 gap-2">
-                              <span className="font-medium">Snow loads</span>
-                              <span className="font-mono">{snowLoad.toFixed(2)} kPa</span>
-                              <span className="font-mono">{snowLoadPsf.toFixed(1)} psf</span>
+                                                {/* Results */}
+                        <Card className="mt-6">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-orange-600 dark:text-orange-400">Results</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3 text-sm">
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-left font-medium text-muted-foreground">Name</div>
+                              <div className="text-center font-medium text-muted-foreground">Value</div>
+                              <div className="text-center font-medium text-muted-foreground">Unit</div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <span className="font-medium">Snow loads (Part 9)</span>
-                              <span className="font-mono">{snowLoadPart9.toFixed(2)} kPa</span>
-                              <span className="font-mono">{snowLoadPart9Psf.toFixed(1)} psf</span>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-left font-medium">Snow loads</div>
+                              <div className="text-center font-mono">{snowLoad.toFixed(2)}</div>
+                              <div className="text-center">kPa</div>
                             </div>
-                          </div>
-                        </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-left"></div>
+                              <div className="text-center font-mono text-red-600 dark:text-red-400">{snowLoadPsf.toFixed(1)}</div>
+                              <div className="text-center text-red-600 dark:text-red-400">psf</div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-left font-medium">Snow loads (Part 9)</div>
+                              <div className="text-center font-mono">{snowLoadPart9.toFixed(2)}</div>
+                              <div className="text-center">kPa</div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-left"></div>
+                              <div className="text-center font-mono text-red-600 dark:text-red-400">{snowLoadPart9Psf.toFixed(1)}</div>
+                              <div className="text-center text-red-600 dark:text-red-400">psf</div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
                       
                       {/* Snow Drifting Load Calculator (Multi-level Roofs) 1.0 */}
-                      <div className="mt-8 max-w-6xl mx-auto bg-purple-50 rounded-lg p-6 border border-purple-200">
-                        <h3 className="text-xl font-bold text-purple-800 mb-4">Snow Drifting Load Calculator (Multi-level Roofs) 1.0</h3>
+                      <div className="mt-8 max-w-6xl mx-auto bg-purple-50 dark:bg-purple-900/20 rounded-lg p-6 border border-purple-200 dark:border-purple-800">
+                        <h3 className="text-xl font-bold text-purple-800 dark:text-purple-400 mb-4">Snow Drifting Load Calculator (Multi-level Roofs) 1.0</h3>
                         
                         <div className="grid grid-cols-1 gap-6">
-                          {/* Part 1: Inputs */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-purple-700 mb-3">Part 1: Inputs</h4>
+                                                      {/* Part 1: Inputs */}
+                            <div className="bg-card rounded-lg p-4 border border-border">
+                            <h4 className="font-semibold text-purple-700 dark:text-purple-400 mb-3">Part 1: Inputs</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               <div className="space-y-3">
-                                <h5 className="font-medium text-purple-600">General Input</h5>
+                                <h5 className="font-medium text-purple-600 dark:text-purple-400">General Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">a (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="1.0"
+                                  <NumberInput
                                     value={driftData.a}
-                                    onChange={(e) => handleDriftChange('a', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('a', value)}
+                                    min={0}
+                                    max={100}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Horizontal gap between upper and lower roofs</span>
+                                  <span className="text-xs text-muted-foreground">Horizontal gap between upper and lower roofs</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">h (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="5.0"
+                                  <NumberInput
                                     value={driftData.h}
-                                    onChange={(e) => handleDriftChange('h', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('h', value)}
+                                    min={0}
+                                    max={50}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Difference in elevation between lower roof surface and top of the parapet of the upper roof</span>
+                                  <span className="text-xs text-muted-foreground">Difference in elevation between lower roof surface and top of the parapet of the upper roof</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">hp_lower (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="2.0"
+                                  <NumberInput
                                     value={driftData.hp_lower}
-                                    onChange={(e) => handleDriftChange('hp_lower', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('hp_lower', value)}
+                                    min={0}
+                                    max={20}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">parapet height of lower-roof source area</span>
+                                  <span className="text-xs text-muted-foreground">parapet height of lower-roof source area</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">x (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="3.0"
+                                  <NumberInput
                                     value={driftData.x}
-                                    onChange={(e) => handleDriftChange('x', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('x', value)}
+                                    min={0}
+                                    max={100}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Optional: Point of interest</span>
+                                  <span className="text-xs text-muted-foreground">Optional: Point of interest</span>
                                 </div>
                               </div>
                               
                               <div className="space-y-3">
-                                <h5 className="font-medium text-purple-600">Case 1 Input</h5>
+                                <h5 className="font-medium text-purple-600 dark:text-purple-400">Case 1 Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_upper (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="10.0"
+                                  <NumberInput
                                     value={driftData.ws_upper}
-                                    onChange={(e) => handleDriftChange('ws_upper', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ws_upper', value)}
+                                    min={0}
+                                    max={200}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Shorter dimension of (upper roof) source area in Case 1</span>
+                                  <span className="text-xs text-muted-foreground">Shorter dimension of (upper roof) source area in Case 1</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_upper (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="15.0"
+                                  <NumberInput
                                     value={driftData.ls_upper}
-                                    onChange={(e) => handleDriftChange('ls_upper', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ls_upper', value)}
+                                    min={0}
+                                    max={300}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Longer dimension of (upper roof) source area in Case 1</span>
+                                  <span className="text-xs text-muted-foreground">Longer dimension of (upper roof) source area in Case 1</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">hp_upper (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="1.0"
+                                  <NumberInput
                                     value={driftData.hp_upper}
-                                    onChange={(e) => handleDriftChange('hp_upper', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('hp_upper', value)}
+                                    min={0}
+                                    max={20}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">parapet height of upper-roof source area in Case 1</span>
+                                  <span className="text-xs text-muted-foreground">parapet height of upper-roof source area in Case 1</span>
                                 </div>
                               </div>
                               
                               <div className="space-y-3">
-                                <h5 className="font-medium text-purple-600">Case 2 & 3 Input</h5>
+                                <h5 className="font-medium text-purple-600 dark:text-purple-400">Case 2 & 3 Input</h5>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_lower2 (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="15.0"
+                                  <NumberInput
                                     value={driftData.ws_lower2}
-                                    onChange={(e) => handleDriftChange('ws_lower2', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ws_lower2', value)}
+                                    min={0}
+                                    max={200}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Shorter dimension of (lower roof) source area in Case 2</span>
+                                  <span className="text-xs text-muted-foreground">Shorter dimension of (lower roof) source area in Case 2</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_lower2 (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="20.0"
+                                  <NumberInput
                                     value={driftData.ls_lower2}
-                                    onChange={(e) => handleDriftChange('ls_lower2', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ls_lower2', value)}
+                                    min={0}
+                                    max={300}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Longer dimension of (lower roof) source area in Case 2</span>
+                                  <span className="text-xs text-muted-foreground">Longer dimension of (lower roof) source area in Case 2</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ws_lower3 (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="15.0"
+                                  <NumberInput
                                     value={driftData.ws_lower3}
-                                    onChange={(e) => handleDriftChange('ws_lower3', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ws_lower3', value)}
+                                    min={0}
+                                    max={200}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Shorter dimension of (lower roof) source area in Case 3</span>
+                                  <span className="text-xs text-muted-foreground">Shorter dimension of (lower roof) source area in Case 3</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 items-center">
                                   <label className="text-sm font-medium">ls_lower3 (m)</label>
-                                  <Input 
-                                    type="number" 
-                                    step="0.1"
-                                    className="h-8"
-                                    placeholder="25.0"
+                                  <NumberInput
                                     value={driftData.ls_lower3}
-                                    onChange={(e) => handleDriftChange('ls_lower3', parseFloat(e.target.value) || 0)}
+                                    onValueChange={(value) => handleDriftChange('ls_lower3', value)}
+                                    min={0}
+                                    max={300}
+                                    step={0.1}
+                                    precision={1}
+                                    className="w-full"
                                   />
-                                  <span className="text-xs text-gray-600">Longer dimension of (lower roof) source area in Case 3</span>
+                                  <span className="text-xs text-muted-foreground">Longer dimension of (lower roof) source area in Case 3</span>
                                 </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Part 2-4: Unified Snow Drifting Load Results */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-purple-700 mb-3">Part 2-4: Snow Drifting Load Results</h4>
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse border border-gray-300">
-                                <thead>
-                                  <tr className="bg-purple-100">
-                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Parameter</th>
-                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I</th>
-                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II</th>
-                                    <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">β</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.β.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.β.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.β.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ics</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ics.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ics.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ics.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Cw</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Cw.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Cw.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Cw.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">hp'</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.hp_prime.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.hp_prime.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.hp_prime.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Cs</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Cs.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Cs.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Cs.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">F</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.F.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.F.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.F.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0_1</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ca0_1.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ca0_1.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ca0_1.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0_2</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.Ca0_2.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.Ca0_2.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.Ca0_2.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">Ca0</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseI.Ca0_I === 'string' ? caseI.Ca0_I : caseI.Ca0_I.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseII.Ca0_II === 'string' ? caseII.Ca0_II : caseII.Ca0_II.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{typeof caseIII.Ca0_III === 'string' ? caseIII.Ca0_III : caseIII.Ca0_III.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-medium">xd (m)</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseI.xd_I.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseII.xd_II.toFixed(2)}</td>
-                                    <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{caseIII.xd_III.toFixed(2)}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
+                          <Card className="p-4">
+                            <h4 className="font-semibold text-purple-700 dark:text-purple-400 mb-3">Part 2-4: Snow Drifting Load Results</h4>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-sm font-medium">Parameter</TableHead>
+                                  <TableHead className="text-sm font-medium">Case I</TableHead>
+                                  <TableHead className="text-sm font-medium">Case II</TableHead>
+                                  <TableHead className="text-sm font-medium">Case III</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">β</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.β.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.β.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.β.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Ics</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.Ics.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.Ics.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.Ics.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Cw</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.Cw.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.Cw.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.Cw.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">hp'</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.hp_prime.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.hp_prime.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.hp_prime.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Cs</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.Cs.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.Cs.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.Cs.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">F</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.F.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.F.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.F.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Ca0_1</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.Ca0_1.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.Ca0_1.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.Ca0_1.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Ca0_2</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.Ca0_2.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.Ca0_2.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.Ca0_2.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">Ca0</TableCell>
+                                  <TableCell className="text-sm font-mono">{typeof caseI.Ca0_I === 'string' ? caseI.Ca0_I : caseI.Ca0_I.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{typeof caseII.Ca0_II === 'string' ? caseII.Ca0_II : caseII.Ca0_II.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{typeof caseIII.Ca0_III === 'string' ? caseIII.Ca0_III : caseIII.Ca0_III.toFixed(2)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="text-sm font-medium">xd (m)</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseI.xd_I.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseII.xd_II.toFixed(2)}</TableCell>
+                                  <TableCell className="text-sm font-mono">{caseIII.xd_III.toFixed(2)}</TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
                             
                             {/* Snow Load Distribution Table */}
                             <div className="mt-6">
-                              <h5 className="font-semibold text-purple-600 mb-3">Snow Load Distribution</h5>
-                              <div className="overflow-x-auto">
-                                <table className="w-full border-collapse border border-gray-300">
-                                  <thead>
-                                    <tr className="bg-purple-100">
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I Location x (ft)</th>
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case I S (psf)</th>
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II Location x (ft)</th>
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case II S (psf)</th>
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III Location x (ft)</th>
-                                      <th className="border border-gray-300 px-3 py-2 text-sm font-medium">Case III S (psf)</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseI.Ca0_I === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseII.Ca0_II === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">0.00</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseIII.Ca0_III === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
-                                      </td>
-                                    </tr>
-                                    <tr>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseI.xd_I * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
-                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseII.xd_II * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
-                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(caseIII.xd_III * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">
-                                        {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                    </tr>
-                                    <tr>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseI.Ca0_I === 'number' && (driftData.x * 3.28) <= (caseI.xd_I * 3.28) ? 
-                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
-                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
-                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
-                                           (driftData.x * 3.28) / (caseI.xd_I * 3.28)).toFixed(1) : 
-                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseII.Ca0_II === 'number' && (driftData.x * 3.28) <= (caseII.xd_II * 3.28) ? 
-                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
-                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
-                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
-                                           (driftData.x * 3.28) / (caseII.xd_II * 3.28)).toFixed(1) : 
-                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-3 py-2 text-sm font-mono text-red-600">
-                                        {typeof caseIII.Ca0_III === 'number' && (driftData.x * 3.28) <= (caseIII.xd_III * 3.28) ? 
-                                          ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
-                                           ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
-                                            (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
-                                           (driftData.x * 3.28) / (caseIII.xd_III * 3.28)).toFixed(1) : 
-                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
+                              <h5 className="font-semibold text-purple-700 dark:text-purple-400 mb-3">Snow Load Distribution</h5>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-sm font-medium">Case I Location x (ft)</TableHead>
+                                    <TableHead className="text-sm font-medium">Case I S (psf)</TableHead>
+                                    <TableHead className="text-sm font-medium">Case II Location x (ft)</TableHead>
+                                    <TableHead className="text-sm font-medium">Case II S (psf)</TableHead>
+                                    <TableHead className="text-sm font-medium">Case III Location x (ft)</TableHead>
+                                    <TableHead className="text-sm font-medium">Case III S (psf)</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  <TableRow>
+                                    <TableCell className="text-sm font-mono">0.00</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseI.Ca0_I === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">0.00</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseII.Ca0_II === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">0.00</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseIII.Ca0_III === 'number' ? (driftData.Is * (driftData.Ss * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543).toFixed(1) : 'N/A'}
+                                    </TableCell>
+                                  </TableRow>
+                                  <TableRow>
+                                    <TableCell className="text-sm font-mono">{(caseI.xd_I * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono">
+                                      {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">{(caseII.xd_II * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono">
+                                      {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">{(caseIII.xd_III * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono">
+                                      {(driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                  </TableRow>
+                                  <TableRow>
+                                    <TableCell className="text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseI.Ca0_I === 'number' && (driftData.x * 3.28) <= (caseI.xd_I * 3.28) ? 
+                                        ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
+                                         ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseI.Ca0_I + driftData.Sr) * 20.88543) - 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                         (driftData.x * 3.28) / (caseI.xd_I * 3.28)).toFixed(1) : 
+                                        (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseII.Ca0_II === 'number' && (driftData.x * 3.28) <= (caseII.xd_II * 3.28) ? 
+                                        ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
+                                         ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseII.Ca0_II + driftData.Sr) * 20.88543) - 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                         (driftData.x * 3.28) / (caseII.xd_II * 3.28)).toFixed(1) : 
+                                        (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-mono">{(driftData.x * 3.28).toFixed(2)}</TableCell>
+                                    <TableCell className="text-sm font-mono text-red-600 dark:text-red-400">
+                                      {typeof caseIII.Ca0_III === 'number' && (driftData.x * 3.28) <= (caseIII.xd_III * 3.28) ? 
+                                        ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
+                                         ((driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * caseIII.Ca0_III + driftData.Sr) * 20.88543) - 
+                                          (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543)) * 
+                                         (driftData.x * 3.28) / (caseIII.xd_III * 3.28)).toFixed(1) : 
+                                        (driftData.Is * (driftData.Ss_for_distribution * driftData.Cb * driftData.Cw * driftData.Cs_default * 1 + driftData.Sr) * 20.88543).toFixed(1)}
+                                    </TableCell>
+                                  </TableRow>
+                                </TableBody>
+                              </Table>
                             </div>
-                          </div>
+                          </Card>
                         </div>
                       </div>
                       </>
@@ -5551,13 +5598,13 @@ export default function HomePage() {
                     const internalPressureMaxPsf = internalPressureMax * 20.88543;
 
                     return (
-                      <div className="max-w-6xl mx-auto bg-green-50 rounded-lg p-6 border border-green-200">
-                        <h3 className="text-xl font-bold text-green-800 mb-4">Wind Load Calculator 1.0</h3>
+                      <div className="max-w-6xl mx-auto bg-green-50 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
+                                                  <h3 className="text-xl font-bold text-green-800 dark:text-green-400 mb-4">Wind Load Calculator 1.0</h3>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          {/* Input Area: Location only */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-green-700 mb-3">Input Area</h4>
+                                                      {/* Input Area: Location only */}
+                            <div className="bg-card rounded-lg p-4 border border-border">
+                            <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3">Input Area</h4>
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Location</label>
@@ -5578,317 +5625,319 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* Default Inputs */}
-                          <div className="bg-white rounded-lg p-4">
-                            <h4 className="font-semibold text-green-700 mb-3">Default Inputs</h4>
+                                                      {/* Default Inputs */}
+                            <div className="bg-card rounded-lg p-4 border border-border">
+                            <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3">Default Inputs</h4>
                             <div className="space-y-3">
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Iw</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.iw}
-                                  onChange={e => handleWindChange('iw', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleWindChange('iw', value)}
+                                  min={0}
+                                  max={2}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">Importance Factor: normal(ULS)=1; SLS=0.8</span>
+                                <span className="text-xs text-muted-foreground">Importance Factor: normal(ULS)=1; SLS=0.8</span>
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ce</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.ce}
-                                  onChange={e => handleWindChange('ce', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleWindChange('ce', value)}
+                                  min={0}
+                                  max={2}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">Exposure factor: (1) Ce=0.7, rough (suburban, urban or wooded terrain), H≤12m(39'); (2) Ce=0.9~1, open terrain, H≤12m(39')</span>
+                                <span className="text-xs text-muted-foreground">Exposure factor: (1) Ce=0.7, rough (suburban, urban or wooded terrain), H≤12m(39'); (2) Ce=0.9~1, open terrain, H≤12m(39')</span>
                               </div>
                               <div className="grid grid-cols-3 gap-2 items-center">
                                 <label className="text-sm font-medium">Ct</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1"
-                                  className="flex h-8 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <NumberInput
                                   value={data.ct}
-                                  onChange={e => handleWindChange('ct', parseFloat(e.target.value) || 0)}
+                                  onValueChange={(value) => handleWindChange('ct', value)}
+                                  min={0}
+                                  max={3}
+                                  step={0.1}
+                                  precision={1}
+                                  className="w-full"
                                 />
-                                <span className="text-xs text-gray-600">Topographic Factor: Ct=1 for normal, else for hill/slope (refer to Code)</span>
+                                <span className="text-xs text-muted-foreground">Topographic Factor: Ct=1 for normal, else for hill/slope (refer to Code)</span>
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {/* Calculation Area: from q to Cpi */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-blue-700 mb-3">Calculation Area</h4>
-                                                      <div className="space-y-0">
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-3">Calculation Area</h4>
+                                                      <div className="space-y-0 text-muted-foreground">
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">q</span><span className="font-mono">{q.toFixed(2)}</span><span className="text-xs text-gray-600">Hourly Wind Pressures kPa, 1/50</span>
+                                <span className="font-medium text-muted-foreground">Parameter</span>
+                                <span className="font-medium text-muted-foreground">Value</span>
+                                <span className="font-medium text-muted-foreground">Description</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cg_main</span><span className="font-mono">{data.cgMain}</span><span className="text-xs text-gray-600">Gust Effect Factor: Cg=2 for main structure</span>
+                                <span className="font-medium">q</span><span className="font-mono">{q.toFixed(2)}</span>                                <span className="text-xs">Hourly Wind Pressures kPa, 1/50</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cg_cladding</span><span className="font-mono">{data.cgCladding}</span><span className="text-xs text-gray-600">Gust Effect Factor: 2.5 for cladding</span>
+                                <span className="font-medium">Cg_main</span><span className="font-mono">{data.cgMain}</span>                                <span className="text-xs">Gust Effect Factor: Cg=2 for main structure</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cp windward</span><span className="font-mono">{data.cpWindward}</span><span className="text-xs text-gray-600">External Pressure Coefficients: For normal buildings; Conservative Value (H/D≥1)</span>
+                                <span className="font-medium">Cg_cladding</span><span className="font-mono">{data.cgCladding}</span>                                <span className="text-xs">Gust Effect Factor: 2.5 for cladding</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
+                              <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
+                                <span className="font-medium">Cp windward</span><span className="font-mono">{data.cpWindward}</span>                                <span className="text-xs">External Pressure Coefficients: For normal buildings; Conservative Value (H/D≥1)</span>
+                              </div>
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
                                 <span className="font-medium">Cp leeward</span><span className="font-mono">{data.cpLeeward}</span><span/>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
                                 <span className="font-medium">Cp parallel</span><span className="font-mono">{data.cpParallel}</span><span/>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
                                 <span className="font-medium">Cp roof</span><span className="font-mono">{data.cpRoof}</span><span/>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cp cladding</span><span className="font-mono">±0.9</span><span className="text-xs text-gray-600">For walls, balcony guards → but not for the corner part</span>
+                                <span className="font-medium">Cp cladding</span><span className="font-mono">±0.9</span>                                <span className="text-xs">For walls, balcony guards → but not for the corner part</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cei</span><span className="font-mono">{data.cei}</span><span className="text-xs text-gray-600">Normally equal to Ce; 0.7, rough, H≤12m(39')</span>
+                                <span className="font-medium">Cei</span><span className="font-mono">{data.cei}</span><span className="text-xs">Normally equal to Ce; 0.7, rough, H≤12m(39')</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cgi</span><span className="font-mono">{data.cgi}</span><span className="text-xs text-gray-600">Internal Gust Effect Factor: Cgi=2</span>
+                                <span className="font-medium">Cgi</span><span className="font-mono">{data.cgi}</span><span className="text-xs">Internal Gust Effect Factor: Cgi=2</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
-                                <span className="font-medium">Cpi (min)</span><span className="font-mono">{data.cpiMin}</span><span className="text-xs text-gray-600">Internal Pressure Coefficient: Non-uniformly distributed openings of which none is significant or significant openings that are wind-resistant and closed during storms</span>
+                                <span className="font-medium">Cpi (min)</span><span className="font-mono">{data.cpiMin}</span><span className="text-xs">Internal Pressure Coefficient: Non-uniformly distributed openings of which none is significant or significant openings that are wind-resistant and closed during storms</span>
                               </div>
-                              <hr className="border-gray-200" />
+                              <Separator />
                               <div className="grid grid-cols-3 gap-2 text-sm items-center py-2">
                                 <span className="font-medium">Cpi (max)</span><span className="font-mono">{data.cpiMax}</span><span/>
                               </div>
                             </div>
-                        </div>
+                        </Card>
 
                         {/* External Pressure Area */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-green-700 mb-3">External Pressure: P = Iw × q × Ce × Ct × Cg × Cp</h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse border border-gray-300">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Surface</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Windward Surface</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{windwardSurface.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{windwardSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Leeward Surface</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{leewardSurface.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{leewardSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Parallel Surface</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{parallelSurface.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{parallelSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Roof Surface</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{roofSurface.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{roofSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Cladding Surface</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{claddingSurfaceKpaPos.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{claddingSurfacePsfPos.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3">External Pressure: P = Iw × q × Ce × Ct × Cg × Cp</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-left">Surface</TableHead>
+                                <TableHead className="text-center">Value</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Windward Surface</TableCell>
+                                <TableCell className="text-center font-mono">{windwardSurface.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{windwardSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Leeward Surface</TableCell>
+                                <TableCell className="text-center font-mono">{leewardSurface.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{leewardSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Parallel Surface</TableCell>
+                                <TableCell className="text-center font-mono">{parallelSurface.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{parallelSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Roof Surface</TableCell>
+                                <TableCell className="text-center font-mono">{roofSurface.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{roofSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Cladding Surface</TableCell>
+                                <TableCell className="text-center font-mono">{claddingSurfaceKpaPos.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{claddingSurfacePsfPos.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Card>
 
                         {/* Internal Pressure Area */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-green-700 mb-3">Internal Pressure: P = Iw × q × Cei × Ct × Cgi × Cpi</h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse border border-gray-300">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Surface</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Surface Max.</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{internalPressureMax.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{internalPressureMaxPsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Surface Min.</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{internalPressureMin.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">Kpa</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2"></td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono text-red-600">{internalPressureMinPsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-red-600">psf</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3">Internal Pressure: P = Iw × q × Cei × Ct × Cgi × Cpi</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-left">Surface</TableHead>
+                                <TableHead className="text-center">Value</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Surface Max.</TableCell>
+                                <TableCell className="text-center font-mono">{internalPressureMax.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{internalPressureMaxPsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Surface Min.</TableCell>
+                                <TableCell className="text-center font-mono">{internalPressureMin.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">kPa</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center font-mono text-red-600 dark:text-red-400">{internalPressureMinPsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center text-red-600 dark:text-red-400">psf</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Card>
 
                         {/* Main Structure */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-blue-700 mb-3">Main Structure (Whole Building)</h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse border border-gray-300">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Max pressure</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{windwardSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">windward surface, Cp=0.8</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Max suction</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{parallelSurfacePsf.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">parallel surface, Cp=-0.7</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Roof</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(roofSurfacePsf - internalPressureMaxPsf).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">external roof + internal pressure, Cp= -1-0.3 = -1.3</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Windward Direction as a Whole</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(windwardSurfacePsf - leewardSurfacePsf).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">windward - leeward surface, Cp = 0.8 - (-0.5) = 1.3</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-3">Main Structure (Whole Building)</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-left">Component</TableHead>
+                                <TableHead className="text-center">Value</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                                <TableHead className="text-left">Description</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Max pressure</TableCell>
+                                <TableCell className="text-center font-mono">{windwardSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">windward surface, Cp=0.8</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Max suction</TableCell>
+                                <TableCell className="text-center font-mono">{parallelSurfacePsf.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">parallel surface, Cp=-0.7</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Roof</TableCell>
+                                <TableCell className="text-center font-mono">{(roofSurfacePsf - internalPressureMaxPsf).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">external roof + internal pressure, Cp= -1-0.3 = -1.3</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Windward Direction as a Whole</TableCell>
+                                <TableCell className="text-center font-mono">{(windwardSurfacePsf - leewardSurfacePsf).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">windward - leeward surface, Cp = 0.8 - (-0.5) = 1.3</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Card>
 
                         {/* Components */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-purple-700 mb-3">Components</h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse border border-gray-300">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Wall Cladding - Inward</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(claddingSurfacePsfPos - internalPressureMinPsf).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding pressure + internal suction, Cp = 0.9- (-0.45) =1.35</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Wall Cladding - Outward</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(claddingSurfacePsfNeg - internalPressureMaxPsf).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding suction + internal pressure, Cp = -0.9-0.3 = -1.2</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Balcony guards</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{claddingSurfacePsfPos.toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">external cladding pressure, Cp = 0.9</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-purple-700 dark:text-purple-400 mb-3">Components</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-left">Component</TableHead>
+                                <TableHead className="text-center">Value</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                                <TableHead className="text-left">Description</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Wall Cladding - Inward</TableCell>
+                                <TableCell className="text-center font-mono">{(claddingSurfacePsfPos - internalPressureMinPsf).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">external cladding pressure + internal suction, Cp = 0.9- (-0.45) =1.35</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Wall Cladding - Outward</TableCell>
+                                <TableCell className="text-center font-mono">{(claddingSurfacePsfNeg - internalPressureMaxPsf).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">external cladding suction + internal pressure, Cp = -0.9-0.3 = -1.2</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Balcony guards</TableCell>
+                                <TableCell className="text-center font-mono">{claddingSurfacePsfPos.toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">external cladding pressure, Cp = 0.9</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Card>
 
                         {/* Canopy */}
-                        <div className="mt-6 bg-white rounded-lg p-4">
-                          <h4 className="font-semibold text-orange-700 mb-3">Canopy</h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse border border-gray-300">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Component</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Value</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-center">Unit</th>
-                                  <th className="border border-gray-300 px-3 py-2 text-left">Description</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Canopy (Positive Pressure)</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(data.iw * q * data.ce * data.ct * 1.5 * 20.88543).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">Attached Canopies on Low Buildings with a Height H ≤ 20 m: (1) Net gust pressure → Pnet = Iw × q × Ce × Ct × (CgCp)net; (2) + → downward, - → upward;</td>
-                                </tr>
-                                <tr>
-                                  <td className="border border-gray-300 px-3 py-2 font-medium">Canopy (Negative Pressure)</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center font-mono">{(data.iw * q * data.ce * data.ct * (-3.2) * 20.88543).toFixed(2)}</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">psf</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-sm">(3) Conservative value: (CgCp)net = 1.5(max.) / -3.2(min.)</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <Card className="mt-6 p-4">
+                          <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-3">Canopy</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-left">Component</TableHead>
+                                <TableHead className="text-center">Value</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                                <TableHead className="text-left">Description</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Canopy (Positive Pressure)</TableCell>
+                                <TableCell className="text-center font-mono">{(data.iw * q * data.ce * data.ct * 1.5 * 20.88543).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">Attached Canopies on Low Buildings with a Height H ≤ 20 m: (1) Net gust pressure → Pnet = Iw × q × Ce × Ct × (CgCp)net; (2) + → downward, - → upward;</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Canopy (Negative Pressure)</TableCell>
+                                <TableCell className="text-center font-mono">{(data.iw * q * data.ce * data.ct * (-3.2) * 20.88543).toFixed(2)}</TableCell>
+                                <TableCell className="text-center">psf</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">(3) Conservative value: (CgCp)net = 1.5(max.) / -3.2(min.)</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Card>
                       </div>
                     );
                   }
@@ -5957,74 +6006,102 @@ export default function HomePage() {
                       }
                     };
                     return (
-                      <Card className="max-w-md mx-auto">
-                        <CardHeader>
-                          <CardTitle className="text-lg text-center">Seismic Data Form</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-2 gap-3 items-center text-sm font-medium">
-                            <div className="text-right pr-2 text-muted-foreground">Designer</div>
-                            <Input 
-                              value={data.designer || ''} 
-                              onChange={e => handleChange('designer', e.target.value)} 
-                              className="h-8"
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Address *</div>
-                            <Input 
-                              value={data.address || ''} 
-                              onChange={e => handleChange('address', e.target.value)} 
-                              placeholder="Enter the address"
-                              className={`h-8 ${showSeismicValidationError && !data.address ? 'border-destructive' : ''}`}
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Project #</div>
-                            <Input 
-                              value={data.project || ''} 
-                              onChange={e => handleChange('project', e.target.value)} 
-                              className="h-8"
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Revision</div>
-                            <Input 
-                              value={data.revision || ''} 
-                              onChange={e => handleChange('revision', e.target.value)} 
-                              className="h-8"
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Date</div>
-                            <Input 
-                              value={data.date || ''} 
-                              onChange={e => handleChange('date', e.target.value)} 
-                              className="h-8"
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Bldg code</div>
-                            <Input 
-                              value={data.bldgCode || ''} 
-                              onChange={e => handleChange('bldgCode', e.target.value)} 
-                              className="h-8"
-                            />
-                            <div className="text-right pr-2 text-muted-foreground">Api_key *</div>
-                            {hasStoredApiKey ? (
-                              <div className="relative">
-                                <Input
-                                  type="text"
-                                  value="Securely stored - no need to enter"
-                                  disabled={true}
-                                  className="bg-green-50 border-green-300 text-green-700 cursor-not-allowed"
+                      <>
+                        {/* Seismic Data Form */}
+                        <Card className="max-w-md mx-auto mb-6">
+                          <CardHeader>
+                            <CardTitle className="text-lg text-center">Seismic Data Form</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="designer">Designer</Label>
+                                <Input 
+                                  id="designer"
+                                  value={data.designer || ''} 
+                                  onChange={e => handleChange('designer', e.target.value)} 
+                                  placeholder="Enter designer name"
                                 />
                               </div>
-                            ) : (
-                              <Input
-                                type="password"
-                                value={data.apiKey || ''}
-                                onChange={(e) => handleChange('apiKey', e.target.value)}
-                                placeholder="Enter your API key"
-                                disabled={apiKeyLoading}
-                                className={`h-8 ${
-                                  showSeismicValidationError && !data.apiKey 
-                                    ? 'border-destructive' 
-                                    : ''
-                                }`}
-                              />
-                            )}
-                          </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor="address">Address *</Label>
+                                <Input 
+                                  id="address"
+                                  value={data.address || ''} 
+                                  onChange={e => handleChange('address', e.target.value)} 
+                                  placeholder="Enter the address"
+                                  className={showSeismicValidationError && !data.address ? 'border-destructive' : ''}
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="project">Project #</Label>
+                                  <Input 
+                                    id="project"
+                                    value={data.project || ''} 
+                                    onChange={e => handleChange('project', e.target.value)} 
+                                    placeholder="Project number"
+                                  />
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label htmlFor="revision">Revision</Label>
+                                  <Input 
+                                    id="revision"
+                                    value={data.revision || ''} 
+                                    onChange={e => handleChange('revision', e.target.value)} 
+                                    placeholder="Revision"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="date">Date</Label>
+                                  <Input 
+                                    id="date"
+                                    value={data.date || ''} 
+                                    onChange={e => handleChange('date', e.target.value)} 
+                                    placeholder="Select date"
+                                  />
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label htmlFor="bldgCode">Building Code</Label>
+                                  <Input 
+                                    id="bldgCode"
+                                    value={data.bldgCode || ''} 
+                                    onChange={e => handleChange('bldgCode', e.target.value)} 
+                                    placeholder="Building code"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor="apiKey">API Key *</Label>
+                                                            {hasStoredApiKey ? (
+                                  <Input
+                                    id="apiKey"
+                                    type="text"
+                                    value="Securely stored - no need to enter"
+                                    disabled={true}
+                                    className="bg-green-50 border-green-300 text-green-700 cursor-not-allowed"
+                                  />
+                                ) : (
+                                  <Input
+                                    id="apiKey"
+                                    type="password"
+                                    value={data.apiKey || ''}
+                                    onChange={(e) => handleChange('apiKey', e.target.value)}
+                                    placeholder="Enter your API key"
+                                    disabled={apiKeyLoading}
+                                    className={showSeismicValidationError && !data.apiKey ? 'border-destructive' : ''}
+                                  />
+                                )}
+                              </div>
+                            </div>
                           
                           {/* API Key Status Note */}
                           {hasStoredApiKey && (
@@ -6038,17 +6115,15 @@ export default function HomePage() {
                           {/* API Key Options - only show when no key is stored */}
                           {!hasStoredApiKey && (
                             <div className="flex items-center justify-center space-x-2 mt-4">
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 id="remember-key"
                                 checked={rememberApiKey}
-                                onChange={(e) => setRememberApiKey(e.target.checked)}
+                                onCheckedChange={setRememberApiKey}
                                 disabled={apiKeyLoading}
-                                className="rounded border-gray-300 text-primary focus:ring-primary"
                               />
-                              <label htmlFor="remember-key" className="text-sm text-muted-foreground">
+                              <Label htmlFor="remember-key" className="text-sm text-muted-foreground">
                                 Remember my API key securely
-                              </label>
+                              </Label>
                               <Button
                                 type="button"
                                 variant="link"
@@ -6246,124 +6321,31 @@ export default function HomePage() {
                             Clear Data
                           </Button>
                         </div>
-                        {/* After the Retrieve Data button and before the sedimentTypes table, render the new info and seismic hazard table: */}
-                        {seismicResult && (
-                          <div className="mt-6">
-                            <div className="mb-2 text-sm">
-                              <div><b>address_checked:</b> {seismicResult.address_checked}</div>
-                              <div><b>site_class:</b> {seismicResult.site_class}</div>
-                              <div><b>longitude:</b> {seismicResult.coordinates?.lon}</div>
-                              <div><b>latitude:</b> {seismicResult.coordinates?.lat}</div>
-                            </div>
-                            {/* Seismic Hazard Table */}
-                            <div className="overflow-x-auto mb-4">
-                              <table className="min-w-full text-xs text-center border border-gray-300 bg-white rounded">
-                                <thead className="bg-gray-200">
-                                  <tr>
-                                    <th className="px-2 py-1 border">T (s)</th>
-                                    <th className="px-2 py-1 border">Sa(T,X)</th>
-                                    <th className="px-2 py-1 border">Sa(T,X450)</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {['0.2','0.5','1.0','2.0','5.0','10.0','PGA'].map((T, i) => (
-                                    <tr key={T}>
-                                      <td className="border px-2 py-1">{T}</td>
-                                      <td className="border px-2 py-1">{seismicResult.sa_site ? seismicResult.sa_site[i] : ''}</td>
-                                      <td className="border px-2 py-1">{seismicResult.sa_x450 ? seismicResult.sa_x450[i] : ''}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                        {/* Sediment Types Table */}
-                        <div className="mt-6">
-                          {(() => {
-                            const showProbability = seismicResult && seismicResult.rgb;
-                            return (
-                              <>
-                                {showSeismicValidationError && seismicFormError && <div className="text-red-600 text-center mb-2">{seismicFormError}</div>}
-                                {seismicResult && sedimentTypes.length > 0 && (
-                                  <div className="overflow-x-auto mt-6">
-                                    <table className="min-w-full text-xs text-center border border-gray-300 bg-white rounded">
-                                      <thead className="bg-gray-200 font-bold">
-                                        <tr>
-                                          <th className="px-2 py-1 border">Type</th>
-                                          <th className="px-2 py-1 border">Sediments</th>
-                                          <th className="px-2 py-1 border">Site Class</th>
-                                          <th className="px-2 py-1 border">Soil Pressure(psf)</th>
-                                          <th className="px-2 py-1 border">Colour</th>
-                                          <th className="px-2 py-1 border">R</th>
-                                          <th className="px-2 py-1 border">G</th>
-                                          <th className="px-2 py-1 border">B</th>
-                                          {showProbability && <th className="px-2 py-1 border">Probability</th>}
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {sedimentTypes.map((row) => (
-                                          <tr key={row.id}>
-                                            <td className="border px-2 py-1">{row.id}</td>
-                                            <td className="border px-2 py-1">{row.sediment_name}</td>
-                                            <td className="border px-2 py-1">{row.site_class}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{row.soil_pressure_psf}</td>
-                                            <td className="border px-2 py-1">
-                                              <span style={{
-                                                display: 'inline-block',
-                                                width: '32px',
-                                                height: '20px',
-                                                borderRadius: '4px',
-                                                backgroundColor: `rgb(${row.color_r},${row.color_g},${row.color_b})`,
-                                                border: '1px solid #ccc'
-                                              }} />
-                                            </td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{row.color_r}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{row.color_g}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{row.color_b}</td>
-                                            {showProbability && <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{row.probability !== undefined ? (row.probability*100).toFixed(3) + '%' : ''}</td>}
-                                          </tr>
-                                        ))}
-                                        {showProbability && seismicResult && seismicResult.most_similar_soil && (
-                                          <tr style={{ color: 'red', fontWeight: 'bold', background: '#ffe4b2' }}>
-                                            <td className="border px-2 py-1">Result</td>
-                                            <td className="border px-2 py-1">{seismicResult.most_similar_soil.sediment_name}</td>
-                                            <td className="border px-2 py-1">{seismicResult.most_similar_soil.site_class}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{seismicResult.most_similar_soil.soil_pressure_psf}</td>
-                                            <td className="border px-2 py-1">
-                                              <span style={{
-                                                display: 'inline-block',
-                                                width: '32px',
-                                                height: '20px',
-                                                borderRadius: '4px',
-                                                backgroundColor: `rgb(${seismicResult.most_similar_soil.color_r},${seismicResult.most_similar_soil.color_g},${seismicResult.most_similar_soil.color_b})`,
-                                                border: '1px solid #ccc'
-                                              }} />
-                                            </td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{seismicResult.most_similar_soil.color_r}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{seismicResult.most_similar_soil.color_g}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{seismicResult.most_similar_soil.color_b}</td>
-                                            <td className="border px-2 py-1" style={{ textAlign: 'right' }}>{(() => {
-                                              if (!sedimentTypes.length) return '';
-                                              const rgb = seismicResult.rgb;
-                                              const soil_rgb = [seismicResult.most_similar_soil.color_r, seismicResult.most_similar_soil.color_g, seismicResult.most_similar_soil.color_b];
-                                              const dot = rgb[0]*soil_rgb[0] + rgb[1]*soil_rgb[1] + rgb[2]*soil_rgb[2];
-                                              const norm1 = Math.sqrt(rgb[0]**2 + rgb[1]**2 + rgb[2]**2);
-                                              const norm2 = Math.sqrt(soil_rgb[0]**2 + soil_rgb[1]**2 + soil_rgb[2]**2);
-                                              return norm1 && norm2 ? (dot/(norm1*norm2)*100).toFixed(3) + '%' : '';
-                                            })()}</td>
-                                          </tr>
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
                         </CardContent>
                       </Card>
+
+                      {/* Independent Results Tables - Full Width */}
+                      {showSeismicValidationError && seismicFormError && (
+                        <div className="text-red-600 text-center mb-6">{seismicFormError}</div>
+                      )}
+                      
+                      {/* Seismic Results Table */}
+                      {seismicResult && (
+                        <div className="mb-6">
+                          <SeismicResultsTable seismicResult={seismicResult} />
+                        </div>
+                      )}
+                      
+                      {/* Sediment Types Table */}
+                      {seismicResult && sedimentTypes.length > 0 && (
+                        <div className="mb-6">
+                          <SedimentTypesTable 
+                            sedimentTypes={sedimentTypes} 
+                            seismicResult={seismicResult} 
+                          />
+                        </div>
+                      )}
+                      </>
                     );
                   }
                   
@@ -6373,16 +6355,16 @@ export default function HomePage() {
                       {(activeTabForDisplay?.type === 'Welcome' || activeTabForDisplay?.tabType === 'Welcome' || activeTabForDisplay?.type === 'welcome' || activeTabForDisplay?.tabType === 'welcome') ? (
                         <div className="welcome-content">
                           <div className="feature-overview mb-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Available Tools:</h3>
-                            <ul className="list-disc list-inside space-y-2 text-gray-600">
+                                            <h3 className="text-lg font-semibold mb-3">Available Tools:</h3>
+                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
                               <li><strong>Snow Load Calculator</strong> - Calculate snow loads for various roof configurations</li>
                               <li><strong>Wind Load Calculator</strong> - Determine wind pressure loads for structures</li>
                               <li><strong>Seismic Analysis</strong> - Get seismic hazard data for specific locations</li>
                             </ul>
                           </div>
                           <div className="getting-started">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Getting Started:</h3>
-                            <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                                            <h3 className="text-lg font-semibold mb-3">Getting Started:</h3>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
                               <li>Create a new tab using the &quot;+&quot; button</li>
                               <li>Select the appropriate calculator type</li>
                               <li>Enter your project parameters</li>
@@ -6393,17 +6375,17 @@ export default function HomePage() {
                       ) : (activeTabForDisplay?.type === 'design_tables' || activeTabForDisplay?.tabType === 'design_tables') ? (
                         <div className="design-tables-content">
                           <div className="workspace-area">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-3">Design Tables & Diagrams</h3>
-                            <p className="text-gray-600 mb-6">This is your workspace for helper diagrams, reference tables, and design documentation.</p>
+                                            <h3 className="text-lg font-semibold mb-3">Design Tables & Diagrams</h3>
+                <p className="text-muted-foreground mb-6">This is your workspace for helper diagrams, reference tables, and design documentation.</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div className="table-placeholder border-2 border-dashed border-gray-300 rounded-lg p-6">
-                                <h4 className="text-md font-semibold text-gray-700 mb-2">Helper Tables</h4>
-                                <p className="text-gray-500">Add structural design tables, load charts, and reference data here.</p>
-                              </div>
-                              <div className="diagram-placeholder border-2 border-dashed border-gray-300 rounded-lg p-6">
-                                <h4 className="text-md font-semibold text-gray-700 mb-2">Design Diagrams</h4>
-                                <p className="text-gray-500">Create and manage structural diagrams, sketches, and visual aids.</p>
-                              </div>
+                                              <div className="table-placeholder border-2 border-dashed border-muted rounded-lg p-6">
+                  <h4 className="text-md font-semibold mb-2">Helper Tables</h4>
+                  <p className="text-muted-foreground">Add structural design tables, load charts, and reference data here.</p>
+                </div>
+                <div className="diagram-placeholder border-2 border-dashed border-muted rounded-lg p-6">
+                  <h4 className="text-md font-semibold mb-2">Design Diagrams</h4>
+                  <p className="text-muted-foreground">Create and manage structural diagrams, sketches, and visual aids.</p>
+                </div>
                             </div>
                           </div>
                         </div>
@@ -6512,7 +6494,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>Paste Tab</span>
@@ -6573,7 +6555,7 @@ export default function HomePage() {
                     variant="ghost"
                     className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <span>Paste after this tab</span>
@@ -6749,94 +6731,74 @@ export default function HomePage() {
 
       {/* Store API Key Modal */}
       {showStoreApiKeyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Store API Key Securely
-              </h3>
-              <button
-                onClick={() => {
-                  setShowStoreApiKeyModal(false);
-                  setCurrentUserPassword('');
-                  setApiKeyError('');
-                }}
-                className="text-gray-400 hover:text-gray-600 transition"
-              >
-                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <Dialog open={showStoreApiKeyModal} onOpenChange={() => {
+          setShowStoreApiKeyModal(false);
+          setCurrentUserPassword('');
+          setApiKeyError('');
+        }}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              </button>
-            </div>
+                Store API Key Securely
+              </DialogTitle>
+            </DialogHeader>
             
-            <div className="flex items-center mb-4">
-              <svg style={{ width: '20px', height: '20px' }} className="text-blue-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="text-gray-700 flex-1">
-                <p className="text-sm mb-4">
+            <div className="space-y-4">
+              <div className="flex items-start">
+                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-muted-foreground">
                   Your API key was used successfully. Would you like to store it securely so you don't need to enter it again?
                 </p>
-                
-                <div className="space-y-3" style={{ marginBottom: '30px' }}>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Enter your password to store the API key:
-                  </label>
-                  <input
-                    type="password"
-                    value={currentUserPassword}
-                    onChange={(e) => setCurrentUserPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Your password"
-                  />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="store-password">Enter your password to store the API key:</Label>
+                <Input
+                  id="store-password"
+                  type="password"
+                  value={currentUserPassword}
+                  onChange={(e) => setCurrentUserPassword(e.target.value)}
+                  placeholder="Your password"
+                />
+              </div>
+              
+              {apiKeyError && (
+                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                  {apiKeyError}
                 </div>
-                
-                {apiKeyError && (
-                  <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
-                    {apiKeyError}
-                  </div>
-                )}
-                
-                {/* Don't show again option */}
-                <div className="mt-4 flex items-center">
-                  <input
-                    type="checkbox"
-                    id="dont-show-again"
-                    checked={dontShowStorePrompt}
-                    onChange={(e) => setDontShowStorePrompt(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="dont-show-again" className="ml-2 text-sm text-gray-600">
-                    Don't show this prompt again
-                  </label>
-                </div>
+              )}
+              
+              {/* Don't show again option */}
+              <div className="flex items-center">
+                <Checkbox
+                  id="dont-show-again"
+                  checked={dontShowStorePrompt}
+                  onCheckedChange={setDontShowStorePrompt}
+                />
+                <Label htmlFor="dont-show-again" className="ml-2 text-sm text-muted-foreground">
+                  Don't show this prompt again
+                </Label>
               </div>
             </div>
             
-            <div className="flex justify-center space-x-3" style={{ paddingTop: '40px', marginTop: '20px' }}>
-              <button
+            <DialogFooter>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowStoreApiKeyModal(false);
                   setCurrentUserPassword('');
                   setApiKeyError('');
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
                 disabled={apiKeyLoading}
               >
                 Don't Store
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
@@ -6852,253 +6814,222 @@ export default function HomePage() {
                   const apiKeyToStore = hasStoredApiKey ? '' : (currentData.apiKey || '');
                   handleStoreApiKey(apiKeyToStore, true);
                 }}
-                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition disabled:opacity-50"
                 disabled={apiKeyLoading}
               >
                 {apiKeyLoading ? 'Storing...' : 'Store Securely'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Delete API Key Modal */}
       {showDeleteApiKeyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Delete API Key
-              </h3>
-              <button
-                onClick={() => {
-                  setShowDeleteApiKeyModal(false);
-                  setDeleteApiKeyPassword('');
-                  setApiKeyError('');
-                }}
-                className="text-gray-400 hover:text-gray-600 transition"
-              >
-                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <Dialog open={showDeleteApiKeyModal} onOpenChange={() => {
+          setShowDeleteApiKeyModal(false);
+          setDeleteApiKeyPassword('');
+          setApiKeyError('');
+        }}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <svg style={{ width: '20px', height: '20px' }} className="text-destructive mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
-              </button>
-            </div>
+                Delete API Key
+              </DialogTitle>
+            </DialogHeader>
             
-            <div className="flex items-center mb-4">
-              <svg style={{ width: '20px', height: '20px' }} className="text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              <div className="text-gray-700 flex-1">
-                <p className="text-sm mb-4">
+            <div className="space-y-4">
+              <div className="flex items-start">
+                <svg style={{ width: '20px', height: '20px' }} className="text-destructive mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <p className="text-sm text-muted-foreground">
                   Are you sure you want to delete your stored API key? You'll need to enter it again when using seismic features.
                 </p>
-                
-                <div className="space-y-3" style={{ marginBottom: '30px' }}>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Enter your password to confirm deletion:
-                  </label>
-                  <input
-                    type="password"
-                    value={deleteApiKeyPassword}
-                    onChange={(e) => setDeleteApiKeyPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    placeholder="Your password"
-                  />
-                </div>
-                
-                {apiKeyError && (
-                  <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
-                    {apiKeyError}
-                  </div>
-                )}
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="delete-password">Enter your password to confirm deletion:</Label>
+                <Input
+                  id="delete-password"
+                  type="password"
+                  value={deleteApiKeyPassword}
+                  onChange={(e) => setDeleteApiKeyPassword(e.target.value)}
+                  placeholder="Your password"
+                />
+              </div>
+              
+              {apiKeyError && (
+                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                  {apiKeyError}
+                </div>
+              )}
             </div>
             
-            <div className="flex justify-center space-x-3" style={{ paddingTop: '40px', marginTop: '20px' }}>
-              <button
+            <DialogFooter>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowDeleteApiKeyModal(false);
                   setDeleteApiKeyPassword('');
                   setApiKeyError('');
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
                 disabled={apiKeyLoading}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={handleDeleteApiKey}
-                className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 transition disabled:opacity-50"
                 disabled={apiKeyLoading}
               >
                 {apiKeyLoading ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Seismic API Key Decryption Modal */}
       {showSeismicDecryptModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Decrypt API Key
-              </h3>
-              <button
-                onClick={() => {
-                  setShowSeismicDecryptModal(false);
-                  setSeismicDecryptPassword('');
-                  setSeismicDecryptError('');
-                  setPendingSeismicData(null);
-                }}
-                className="text-gray-400 hover:text-gray-600 transition"
-              >
-                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <Dialog open={showSeismicDecryptModal} onOpenChange={() => {
+          setShowSeismicDecryptModal(false);
+          setSeismicDecryptPassword('');
+          setSeismicDecryptError('');
+          setPendingSeismicData(null);
+        }}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <svg style={{ width: '24px', height: '24px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-              </button>
-            </div>
+                Decrypt API Key
+              </DialogTitle>
+            </DialogHeader>
             
-            <div className="flex items-center mb-8">
-              <svg style={{ width: '24px', height: '24px' }} className="text-blue-500 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center mb-6">
+              <svg style={{ width: '24px', height: '24px' }} className="text-primary mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              <p className="text-sm text-gray-700">
+              <p className="text-sm text-muted-foreground">
                 Enter your password to decrypt your stored API key for seismic analysis.
               </p>
             </div>
             
-            <div className="space-y-4" style={{ marginBottom: '30px' }}>
-              <label className="block text-sm font-medium text-gray-700">
-                Enter your password:
-              </label>
-              <input
-                type="password"
-                value={seismicDecryptPassword}
-                onChange={(e) => setSeismicDecryptPassword(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Your password"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSeismicDecrypt();
-                  }
-                }}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="decrypt-password">Enter your password:</Label>
+                <Input
+                  id="decrypt-password"
+                  type="password"
+                  value={seismicDecryptPassword}
+                  onChange={(e) => setSeismicDecryptPassword(e.target.value)}
+                  placeholder="Your password"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSeismicDecrypt();
+                    }
+                  }}
+                />
+              </div>
+              
+              {seismicDecryptError && (
+                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                  {seismicDecryptError}
+                </div>
+              )}
             </div>
             
-            {seismicDecryptError && (
-              <div className="mt-4 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
-                {seismicDecryptError}
-              </div>
-            )}
-            
-            <div className="flex justify-center space-x-4" style={{ paddingTop: '40px', marginTop: '20px' }}>
-              <button
+            <DialogFooter>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowSeismicDecryptModal(false);
                   setSeismicDecryptPassword('');
                   setSeismicDecryptError('');
                   setPendingSeismicData(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
                 disabled={seismicDecryptLoading}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSeismicDecrypt}
-                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition disabled:opacity-50"
                 disabled={seismicDecryptLoading}
               >
                 {seismicDecryptLoading ? 'Decrypting...' : 'Decrypt & Continue'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Password Prompt for Encrypted Data */}
       {showPasswordPrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                <svg style={{ width: '24px', height: '24px' }} className="text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Dialog open={showPasswordPrompt} onOpenChange={() => {
+          setShowPasswordPrompt(false);
+          setPasswordPromptCallback(null);
+        }}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <svg style={{ width: '24px', height: '24px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 Encrypted Data Detected
-              </h3>
-            </div>
+              </DialogTitle>
+            </DialogHeader>
             
-            <div className="mb-6">
-              <p className="text-gray-700 mb-4">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
                 Your workspace contains encrypted data. Please enter your password to decrypt and access your data.
               </p>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    const password = e.target.value;
-                    if (password && passwordPromptCallback) {
-                      passwordPromptCallback(password);
+              <div className="space-y-2">
+                <Label htmlFor="password-input">Enter your password:</Label>
+                <Input
+                  id="password-input"
+                  type="password"
+                  placeholder="Enter your password"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      const password = e.target.value;
+                      if (password && passwordPromptCallback) {
+                        passwordPromptCallback(password);
+                      }
                     }
-                  }
-                }}
-                autoFocus
-              />
+                  }}
+                  autoFocus
+                />
+              </div>
             </div>
             
-            <div className="flex justify-end space-x-3">
-              <button
+            <DialogFooter>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowPasswordPrompt(false);
                   setPasswordPromptCallback(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
               >
                 Skip
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
-                  const passwordInput = document.querySelector('input[type="password"]');
+                  const passwordInput = document.querySelector('#password-input');
                   const password = passwordInput?.value;
                   if (password && passwordPromptCallback) {
                     passwordPromptCallback(password);
                   }
                 }}
-                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition"
               >
                 🔓 Decrypt Data
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Toast Notification */}
@@ -7131,6 +7062,71 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Username Edit Dialog */}
+      {showUsernameDialog && (
+        <Dialog open={showUsernameDialog} onOpenChange={() => {
+          setShowUsernameDialog(false);
+          setNewUsername('');
+          setUsernameDialogError('');
+        }}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Change Username
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-username">Enter new username:</Label>
+                <Input
+                  id="new-username"
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="Enter username"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleUsernameUpdate();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              
+              {usernameDialogError && (
+                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                  {usernameDialogError}
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowUsernameDialog(false);
+                  setNewUsername('');
+                  setUsernameDialogError('');
+                }}
+                disabled={usernameLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUsernameUpdate}
+                disabled={usernameLoading}
+              >
+                {usernameLoading ? 'Updating...' : 'Update Username'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
       </div>
     </>
