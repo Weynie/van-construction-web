@@ -329,14 +329,17 @@ export const workspaceApiService = {
    */
   async deleteTab(tabId) {
     try {
+      console.log('🌐 API: Starting DELETE request for tab:', tabId);
       const response = await fetch(`${API_BASE_URL}/workspace/tabs/${tabId}`, {
         method: 'DELETE',
         headers: this.getAuthHeaders(),
       });
       
+      console.log('📡 API: DELETE response status:', response.status, 'for tab:', tabId);
+      
       return await this.handleResponse(response);
     } catch (error) {
-      console.error('Error deleting tab:', error);
+      console.error('🚨 API: Error deleting tab:', tabId, error);
       throw error;
     }
   },
@@ -706,6 +709,18 @@ export const workspaceApiService = {
     } catch (error) {
       console.error('Error getting last active state:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Smart replace tab data - always uses encrypted methods
+   */
+  async replaceTabDataSmart(tabId, newData) {
+    const storedPassword = sessionStorage.getItem('userPassword');
+    if (storedPassword) {
+      return await this.replaceTabDataEncrypted(tabId, newData, storedPassword);
+    } else {
+      throw new Error('Password required for data operations. Please log in again.');
     }
   },
 

@@ -192,7 +192,7 @@ export const tabTemplateService = {
     },
 
     seismic: {
-      // Seismic Template Tab mutable variables
+      // Seismic Hazards Tab mutable variables
       seismicTabData: {
         designer: '',
         address: '',
@@ -234,7 +234,7 @@ export const tabTemplateService = {
       'Design Tables': 'Welcome',
       'Snow Load': 'snow_load',
       'Wind Load': 'wind_load', 
-      'Seismic Template': 'seismic'
+      'Seismic Hazards': 'seismic'
     };
     
     const internalType = displayNameMapping[tabType] || tabType;

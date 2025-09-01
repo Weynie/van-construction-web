@@ -314,11 +314,16 @@ public class WorkspaceDataService {
         
         Tab savedTab = tabRepository.save(tab);
         
-        // Create empty tab data
-        TabData tabData = new TabData();
-        tabData.setTabId(savedTab.getId());
-        tabData.setData(new HashMap<>());
-        tabDataRepository.save(tabData);
+        // Create empty tab data - only for tabs that need data storage
+        // Template tabs (Welcome, design_tables) don't need data storage
+        if (!"Welcome".equals(tabType) && !"design_tables".equals(tabType)) {
+            TabData tabData = new TabData();
+            tabData.setTabId(savedTab.getId());
+            tabData.setIsEncrypted(true);
+            tabData.setDataSalt(tabDataEncryptionService.generateSalt());
+            // Don't set data or encrypted_data - will be set when first data is saved
+            tabDataRepository.save(tabData);
+        }
         
         return savedTab;
     }
@@ -424,12 +429,20 @@ public class WorkspaceDataService {
         
         Tab savedTab = tabRepository.save(newTab);
         
-        // Copy tab data
-        TabData originalData = tabDataRepository.findById(tabId).orElse(null);
-        TabData newData = new TabData();
-        newData.setTabId(savedTab.getId());
-        newData.setData(originalData != null ? new HashMap<>(originalData.getData()) : new HashMap<>());
-        tabDataRepository.save(newData);
+        // Copy tab data - only for tabs that need data storage
+        // Template tabs (Welcome, design_tables) don't need data storage
+        if (!"Welcome".equals(originalTab.getTabType()) && !"design_tables".equals(originalTab.getTabType())) {
+            TabData originalData = tabDataRepository.findById(tabId).orElse(null);
+            if (originalData != null) {
+                TabData newData = new TabData();
+                newData.setTabId(savedTab.getId());
+                newData.setIsEncrypted(originalData.getIsEncrypted());
+                newData.setDataSalt(originalData.getDataSalt());
+                newData.setEncryptedData(originalData.getEncryptedData());
+                newData.setData(originalData.getData());
+                tabDataRepository.save(newData);
+            }
+        }
         
         return savedTab;
     }
@@ -496,12 +509,26 @@ public class WorkspaceDataService {
         
         TabData tabData = tabDataRepository.findById(tabId)
             .orElseGet(() -> {
+                // For template tabs, return null to indicate no data storage needed
+                if ("Welcome".equals(tab.getTabType()) || "design_tables".equals(tab.getTabType())) {
+                    return null;
+                }
+                // For other tabs, create encrypted empty data
                 TabData newData = new TabData();
                 newData.setTabId(tabId);
-                newData.setData(new HashMap<>());
-                newData.setIsEncrypted(false);
+                newData.setIsEncrypted(true);
+                newData.setDataSalt(tabDataEncryptionService.generateSalt());
                 return tabDataRepository.save(newData);
             });
+        
+        // For template tabs, return empty data
+        if (tabData == null) {
+            TabData emptyData = new TabData();
+            emptyData.setTabId(tabId);
+            emptyData.setData(new HashMap<>());
+            emptyData.setIsEncrypted(false);
+            return emptyData;
+        }
         
         // If data is encrypted and password is provided, decrypt for merging
         if (tabData.getIsEncrypted() && userPassword != null && !userPassword.isEmpty()) {
@@ -587,44 +614,36 @@ public class WorkspaceDataService {
         
         TabData tabData = tabDataRepository.findById(tabId)
             .orElseGet(() -> {
+                // For template tabs, return null to indicate no data storage needed
+                if ("Welcome".equals(tab.getTabType()) || "design_tables".equals(tab.getTabType())) {
+                    return null;
+                }
+                // Create new tab data with encrypted empty template by default
                 TabData newData = new TabData();
                 newData.setTabId(tabId);
-                newData.setData(new HashMap<>());
-                newData.setIsEncrypted(false);
+                newData.setIsEncrypted(true);
+                newData.setDataSalt(tabDataEncryptionService.generateSalt());
+                // Store empty template as encrypted data - will be properly encrypted when first saved
+                newData.setEncryptedData(null); // Will be set when first data is saved
                 return tabDataRepository.save(newData);
             });
         
-        // Return data as-is for backward compatibility
-        // For encrypted data, frontend will need to call getTabDataForMerging with password
+        // For template tabs, return empty data
+        if (tabData == null) {
+            TabData emptyData = new TabData();
+            emptyData.setTabId(tabId);
+            emptyData.setData(new HashMap<>());
+            emptyData.setIsEncrypted(false);
+            return emptyData;
+        }
+        
         return tabData;
     }
     
     public TabData replaceTabData(UUID tabId, Long userId, Map<String, Object> newData) {
-        Tab tab = tabRepository.findById(tabId)
-            .orElseThrow(() -> new RuntimeException("Tab not found"));
-            
-        verifyTabOwnership(tab, userId);
-        
-        TabData tabData = tabDataRepository.findById(tabId)
-            .orElseGet(() -> {
-                TabData newTabData = new TabData();
-                newTabData.setTabId(tabId);
-                newTabData.setIsEncrypted(false);
-                return newTabData;
-            });
-        
-        // For backward compatibility - store unencrypted if not already encrypted
-        if (!tabData.getIsEncrypted()) {
-            tabData.setData(newData);
-            tabData.setEncryptedData(null);
-            tabData.setDataSalt(null);
-        } else {
-            // If data was encrypted, it should remain encrypted
-            // This method should not be used for encrypted data without password
-            throw new RuntimeException("Cannot update encrypted data without password. Use encrypted methods.");
-        }
-        
-        return tabDataRepository.save(tabData);
+        // This method is deprecated - all data should be encrypted
+        // Use replaceTabDataEncrypted instead
+        throw new RuntimeException("Cannot update data without password. Use encrypted methods.");
     }
     
     /**
@@ -635,36 +654,9 @@ public class WorkspaceDataService {
     }
 
     public TabData updateTabData(UUID tabId, Long userId, Map<String, Object> deltaData) {
-        Tab tab = tabRepository.findById(tabId)
-            .orElseThrow(() -> new RuntimeException("Tab not found"));
-            
-        verifyTabOwnership(tab, userId);
-        
-        TabData tabData = tabDataRepository.findById(tabId)
-            .orElseGet(() -> {
-                TabData newData = new TabData();
-                newData.setTabId(tabId);
-                newData.setData(new HashMap<>());
-                newData.setIsEncrypted(false);
-                return newData;
-            });
-        
-        // For backward compatibility - only update unencrypted data
-        if (!tabData.getIsEncrypted()) {
-            // Deep merge delta data with existing data
-            Map<String, Object> currentData = tabData.getData();
-            if (currentData == null) {
-                currentData = new HashMap<>();
-            }
-            
-            Map<String, Object> mergedData = deepMerge(currentData, deltaData);
-            tabData.setData(mergedData);
-            
-            return tabDataRepository.save(tabData);
-        } else {
-            // If data is encrypted, require password for updates
-            throw new RuntimeException("Cannot update encrypted data without password. Use encrypted methods.");
-        }
+        // This method is deprecated - all data should be encrypted
+        // Use updateTabDataEncrypted instead
+        throw new RuntimeException("Cannot update data without password. Use encrypted methods.");
     }
     
     /**

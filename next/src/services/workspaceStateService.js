@@ -113,7 +113,7 @@ export const workspaceStateService = {
   async processWorkspaceData(workspaceData, userPassword = null) {
     const { projects } = workspaceData;
     
-    console.log('🏗️ Processing workspace data...', workspaceData);
+    console.log('Processing workspace data...', workspaceData);
     
     if (!projects || !Array.isArray(projects)) {
       return { projects: [] };
@@ -126,24 +126,24 @@ export const workspaceStateService = {
         
         const processedPages = await Promise.all(
           (project.pages || []).map(async (page, pageIndex) => {
-            console.log(`📄 Processing page ${projectIndex}-${pageIndex}: ${page.name}`);
+            console.log(`Processing page ${projectIndex}-${pageIndex}: ${page.name}`);
             
             const processedTabs = await Promise.all(
               (page.tabs || []).map(async (tab, tabIndex) => {
-                console.log(`🏷️ Processing tab ${projectIndex}-${pageIndex}-${tabIndex}: ${tab.name} (${tab.tabType || tab.type})`);
+                console.log(`Processing tab ${projectIndex}-${pageIndex}-${tabIndex}: ${tab.name} (${tab.tabType || tab.type})`);
                 
                 try {
                   // Check if tab has encrypted data first
                   const tabDataResponse = await workspaceApiService.getTabData(tab.id);
                   
                   if (tabDataResponse && tabDataResponse.isEncrypted) {
-                    console.log(`🔒 Tab ${tab.name} has encrypted data, attempting automatic decryption`);
+                    console.log(`Tab ${tab.name} has encrypted data, attempting automatic decryption`);
                     
                     if (userPassword) {
                       try {
                         // Use encrypted merge method with provided password
                         const mergedData = await this.mergeTabDataWithTemplateEncrypted(tab, userPassword);
-                        console.log(`✅ Successfully decrypted and processed tab ${tab.name}`);
+                        console.log(`Successfully decrypted and processed tab ${tab.name}`);
                         
                         return {
                           ...tab,
@@ -165,7 +165,7 @@ export const workspaceStateService = {
                         };
                       }
                     } else {
-                      console.log(`🔒 Tab ${tab.name} is encrypted but no password provided`);
+                      console.log(`Tab ${tab.name} is encrypted but no password provided`);
                       // Return template defaults if no password available
                       const templateData = tabTemplateService.getTemplate(tab.tabType || tab.type);
                       return {
@@ -179,7 +179,7 @@ export const workspaceStateService = {
                   } else {
                     // Regular unencrypted data processing
                     const mergedData = await this.mergeTabDataWithTemplate(tab);
-                    console.log(`✅ Successfully processed tab ${tab.name}`);
+                    console.log(`Successfully processed tab ${tab.name}`);
                     
                     return {
                       ...tab,
@@ -190,7 +190,7 @@ export const workspaceStateService = {
                     };
                   }
                 } catch (error) {
-                  console.error(`❌ Error processing tab ${tab.name}:`, error);
+                  console.error(`Error processing tab ${tab.name}:`, error);
                   return {
                     ...tab,
                     mergedData: null,
@@ -224,22 +224,22 @@ export const workspaceStateService = {
    */
   async mergeTabDataWithTemplate(tab) {
     try {
-      console.log(`🔄 Merging tab data for: ${tab.name} (${tab.tabType})`);
+      console.log(`Merging tab data for: ${tab.name} (${tab.tabType})`);
       
       // Get delta data from backend
       const tabDataResponse = await workspaceApiService.getTabData(tab.id);
       const deltaData = tabDataResponse.data || {};
       
-      console.log(`📄 Delta data for ${tab.name}:`, deltaData);
+      console.log(`Delta data for ${tab.name}:`, deltaData);
       
       // Merge with template
       const mergedData = tabTemplateService.mergeWithTemplate(tab.tabType, deltaData);
       
-      console.log(`✅ Merged data for ${tab.name}:`, mergedData);
+      console.log(`Merged data for ${tab.name}:`, mergedData);
       
       return mergedData;
     } catch (error) {
-      console.error(`❌ Error merging tab data for tab ${tab.id}:`, error);
+      console.error(`Error merging tab data for tab ${tab.id}:`, error);
       // Return template defaults if merge fails
       return tabTemplateService.getTemplate(tab.tabType);
     }
@@ -250,7 +250,7 @@ export const workspaceStateService = {
    */
   async mergeTabDataWithTemplateEncrypted(tab, userPassword = null) {
     try {
-      console.log(`🔐 Merging tab data (with encryption support) for: ${tab.name} (${tab.tabType})`);
+      console.log(`Merging tab data (with encryption support) for: ${tab.name} (${tab.tabType})`);
       
       // Get delta data from backend - first try regular method
       let tabDataResponse = await workspaceApiService.getTabData(tab.id);
@@ -258,30 +258,30 @@ export const workspaceStateService = {
       
       // Check if data is encrypted
       if (tabDataResponse.isEncrypted && userPassword) {
-        console.log(`🔓 Tab data is encrypted, attempting decryption...`);
+        console.log(`Tab data is encrypted, attempting decryption...`);
         try {
           // Get decrypted data for merging
           const decryptedResponse = await workspaceApiService.getTabDataForMerging(tab.id, userPassword);
           deltaData = decryptedResponse.data || {};
-          console.log(`✅ Successfully decrypted data for ${tab.name}`);
+          console.log(`Successfully decrypted data for ${tab.name}`);
         } catch (error) {
-          console.warn(`❌ Failed to decrypt data for ${tab.name}:`, error.message);
+          console.warn(`Failed to decrypt data for ${tab.name}:`, error.message);
           // Fall back to template defaults if decryption fails
           deltaData = {};
         }
       } else if (tabDataResponse.isEncrypted && !userPassword) {
-        console.log(`🔒 Tab data is encrypted but no password provided, using template defaults`);
+        console.log(`Tab data is encrypted but no password provided, using template defaults`);
         deltaData = {};
       } else {
         deltaData = deltaData || {};
       }
       
-      console.log(`📄 Delta data for ${tab.name}:`, deltaData);
+      console.log(`Delta data for ${tab.name}:`, deltaData);
       
       // Merge with template
       const mergedData = tabTemplateService.mergeWithTemplate(tab.tabType, deltaData);
       
-      console.log(`✅ Merged data for ${tab.name}:`, mergedData);
+      console.log(`Merged data for ${tab.name}:`, mergedData);
       
       return {
         mergedData,
@@ -289,7 +289,7 @@ export const workspaceStateService = {
         needsPassword: tabDataResponse.isEncrypted && !userPassword
       };
     } catch (error) {
-      console.error(`❌ Error merging tab data for tab ${tab.id}:`, error);
+      console.error(`Error merging tab data for tab ${tab.id}:`, error);
       // Return template defaults if merge fails
       return {
         mergedData: tabTemplateService.getTemplate(tab.tabType),
@@ -627,28 +627,57 @@ export const workspaceStateService = {
    */
   async deleteTab(tabId) {
     const realId = this.getRealId(tabId);
+    console.log('🎯 StateService: deleteTab called for:', realId);
+    
+    // Check if this tab is already being deleted
+    if (this.pendingChanges.has(`delete_${realId}`)) {
+      console.warn('⚠️ Tab deletion already in progress:', realId);
+      return;
+    }
+    
+    // Mark this tab as being deleted
+    this.pendingChanges.set(`delete_${realId}`, true);
+    console.log('StateService: Marked tab for deletion:', realId);
     
     // Optimistic update
     this.notifyListeners({
       type: 'TAB_DELETED_OPTIMISTIC',
       tabId: realId
     });
+    console.log('📢 StateService: Sent TAB_DELETED_OPTIMISTIC for:', realId);
 
     try {
       await workspaceApiService.deleteTab(realId);
+      console.log('StateService: API deletion successful for:', realId);
       
       this.notifyListeners({
         type: 'TAB_DELETED',
         tabId: realId
       });
+      console.log('📢 StateService: Sent TAB_DELETED for:', realId);
     } catch (error) {
-      // Rollback optimistic update
-      this.notifyListeners({
-        type: 'TAB_DELETE_FAILED',
-        tabId: realId,
-        error: error.message
-      });
-      throw error;
+      console.log('🚨 StateService: API deletion failed for:', realId, error.message);
+      // Rollback optimistic update only if it's not a "Tab not found" error
+      if (!error.message.includes('Tab not found')) {
+        console.log('StateService: Rolling back optimistic update for:', realId);
+        this.notifyListeners({
+          type: 'TAB_DELETE_FAILED',
+          tabId: realId,
+          error: error.message
+        });
+        throw error;
+      } else {
+        // Tab not found is OK - it might have been deleted already
+        console.warn('✅ StateService: Tab already deleted (graceful):', realId);
+        this.notifyListeners({
+          type: 'TAB_DELETED',
+          tabId: realId
+        });
+      }
+    } finally {
+      // Clean up the pending deletion flag
+      this.pendingChanges.delete(`delete_${realId}`);
+      console.log('🧹 StateService: Cleaned up pending deletion for:', realId);
     }
   },
 
@@ -713,12 +742,17 @@ export const workspaceStateService = {
   // ==================== TAB DATA OPERATIONS ====================
 
   /**
-   * Debounced tab data update
+   * Debounced tab data update (encrypted)
    */
   debouncedUpdateTabData: debounce(async (tabId, deltaData, resolve, reject) => {
     try {
       const realId = workspaceStateService.getRealId(tabId);
-      await workspaceApiService.updateTabData(realId, deltaData);
+      const storedPassword = sessionStorage.getItem('userPassword');
+      if (storedPassword) {
+        await workspaceApiService.updateTabDataEncrypted(realId, deltaData, storedPassword);
+      } else {
+        throw new Error('Password required for data operations. Please log in again.');
+      }
       
       workspaceStateService.notifyListeners({
         type: 'TAB_DATA_SAVED',
@@ -738,7 +772,7 @@ export const workspaceStateService = {
   }, 1000),
 
   /**
-   * Update tab data with debounced save
+   * Update tab data with debounced save (encrypted)
    */
   async updateTabData(tabId, tabType, newData) {
     const realId = this.getRealId(tabId);
@@ -761,7 +795,7 @@ export const workspaceStateService = {
   },
 
   /**
-   * Force immediate save of tab data
+   * Force immediate save of tab data (encrypted)
    */
   async saveTabDataImmediately(tabId, tabType, data) {
     const realId = this.getRealId(tabId);
@@ -769,7 +803,12 @@ export const workspaceStateService = {
     const deltaData = tabTemplateService.extractDelta(tabType, data);
     
     try {
-      await workspaceApiService.updateTabData(realId, deltaData);
+      const storedPassword = sessionStorage.getItem('userPassword');
+      if (storedPassword) {
+        await workspaceApiService.updateTabDataEncrypted(realId, deltaData, storedPassword);
+      } else {
+        throw new Error('Password required for data operations. Please log in again.');
+      }
       
       this.notifyListeners({
         type: 'TAB_DATA_SAVED',
@@ -827,11 +866,11 @@ export const workspaceStateService = {
   async saveTabDataEncryptedImmediately(tabId, tabType, data, userPassword) {
     const realId = this.getRealId(tabId);
     
-    console.log('🔍 saveTabDataEncryptedImmediately input data:', data);
+    console.log('saveTabDataEncryptedImmediately input data:', data);
     
     const deltaData = tabTemplateService.extractDelta(tabType, data);
     
-    console.log('🔍 saveTabDataEncryptedImmediately extracted delta:', deltaData);
+          console.log('saveTabDataEncryptedImmediately extracted delta:', deltaData);
     
     try {
       await workspaceApiService.updateTabDataEncrypted(realId, deltaData, userPassword);
@@ -885,6 +924,30 @@ export const workspaceStateService = {
     
     try {
       await workspaceApiService.replaceTabDataEncrypted(realId, newData, userPassword);
+      
+      this.notifyListeners({
+        type: 'TAB_DATA_REPLACED',
+        tabId: realId,
+        data: newData
+      });
+    } catch (error) {
+      this.notifyListeners({
+        type: 'TAB_DATA_SAVE_FAILED',
+        tabId: realId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Smart replace tab data - automatically handles encrypted and unencrypted data
+   */
+  async replaceTabDataSmart(tabId, newData) {
+    const realId = this.getRealId(tabId);
+    
+    try {
+      await workspaceApiService.replaceTabDataSmart(realId, newData);
       
       this.notifyListeners({
         type: 'TAB_DATA_REPLACED',

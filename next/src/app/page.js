@@ -6,6 +6,7 @@ import { userService } from '../services/userService';
 import { workspaceStateService } from '../services/workspaceStateService';
 import { tabTemplateService } from '../services/tabTemplateService';
 import { workspaceApiService } from '../services/workspaceApiService';
+import { themePreferenceService } from '../services/themePreferenceService';
 
 import SeismicResultsTable from '../components/SeismicResultsTable';
 import SedimentTypesTable from '../components/SedimentTypesTable';
@@ -24,6 +25,13 @@ import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
 import { ModeToggle } from '@/components/mode-toggle';
 import { useTheme } from 'next-themes';
+import { 
+  ArrowRight, ArrowLeft, ChevronRight, ChevronLeft, ChevronDown,
+  Key, UserPlus, LogIn, Lock, Unlock,
+  X, Plus, Info, CheckCircle, AlertTriangle, Edit, Copy, Trash2, Scissors, RefreshCw,
+  Settings, Bell, Palette, Database, Shield, User,
+  Folder, FileText, Globe, GripVertical
+} from 'lucide-react';
 
 // Add CSS for hiding scrollbars
 const scrollbarHideStyles = `
@@ -37,6 +45,7 @@ const scrollbarHideStyles = `
 `;
 
 export default function HomePage() {
+  console.log('🚀 HomePage component rendered');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -67,6 +76,7 @@ export default function HomePage() {
   const [draggedTab, setDraggedTab] = useState(null);
   const [dragOverTab, setDragOverTab] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [deletingTabs, setDeletingTabs] = useState(new Set());
   
   // Drag and drop state for projects and pages
   const [draggedProject, setDraggedProject] = useState(null);
@@ -75,6 +85,7 @@ export default function HomePage() {
   const [dragOverPage, setDragOverPage] = useState(null);
   const [isDraggingProject, setIsDraggingProject] = useState(false);
   const [isDraggingPage, setIsDraggingPage] = useState(false);
+  const [isDraggingTabToPage, setIsDraggingTabToPage] = useState(false);
   
   // Tab scroll state
   const [tabScrollLeft, setTabScrollLeft] = useState(0);
@@ -93,7 +104,7 @@ export default function HomePage() {
   // Copy/Cut and paste state for tabs
   const [clipboard, setClipboard] = useState({ type: null, data: null }); // 'copy' or 'cut'
 
-  // Add state for seismic template fields per tab
+  // Add state for seismic hazards fields per tab
   const [seismicTabData, setSeismicTabData] = useState({});
   
   // Encryption state - always enabled for authenticated users
@@ -144,7 +155,7 @@ export default function HomePage() {
     }
   }, [theme]);
   
-  // API key decryption modal state for seismic template
+  // API key decryption modal state for seismic hazards
   const [showSeismicDecryptModal, setShowSeismicDecryptModal] = useState(false);
   const [seismicDecryptPassword, setSeismicDecryptPassword] = useState('');
   const [seismicDecryptError, setSeismicDecryptError] = useState('');
@@ -169,30 +180,62 @@ export default function HomePage() {
   // Check for existing authentication on component mount
   useEffect(() => {
     const checkAuthentication = async () => {
+      console.log('Starting authentication check...');
       if (typeof window !== 'undefined' && window.localStorage) {
         const token = localStorage.getItem('token');
         const storedUserId = localStorage.getItem('userId');
+        console.log('Found in localStorage:', { token: !!token, userId: storedUserId });
+        
         if (token && storedUserId) {
           const userId = parseInt(storedUserId);
+          console.log('Setting authentication state for user:', userId);
           setIsAuthenticated(true);
           setUserId(userId);
           
           // Restore password from sessionStorage if available
           const storedPassword = sessionStorage.getItem('userPassword');
-                  if (storedPassword) {
-          setUserPassword(storedPassword);
-        }
+          console.log('🔑 Stored password found:', !!storedPassword);
+          if (storedPassword) {
+            setUserPassword(storedPassword);
+          }
           
           // Fetch user profile data
           try {
+            console.log('👤 Fetching user profile...');
             const profile = await userService.getUserProfile(userId);
             setUsername(profile.username);
+            console.log('User profile loaded:', profile.username);
+            
+            // Load user's theme preference
+            try {
+              console.log('Loading theme preference...');
+              const themePreference = await themePreferenceService.getThemePreference(userId);
+                              console.log('Theme preference loaded:', themePreference);
+              
+              // Apply the theme preference using next-themes
+              // Add a small delay to ensure theme system is ready
+              setTimeout(() => {
+                setTheme(themePreference);
+              }, 100);
+              
+              // Also save to localStorage for immediate access
+              themePreferenceService.saveThemeToLocalStorage(themePreference);
+            } catch (themeError) {
+              console.warn('⚠️ Failed to load theme preference, using localStorage fallback:', themeError);
+              // Use localStorage fallback
+              const fallbackTheme = themePreferenceService.getThemeFromLocalStorage();
+              console.log('Using fallback theme:', fallbackTheme);
+              setTimeout(() => {
+                setTheme(fallbackTheme);
+              }, 100);
+            }
             
             // Initialize workspace after successful authentication
             // Pass the stored password directly to ensure it's available immediately
+            console.log('🚀 Starting workspace initialization...');
             await initializeWorkspace(storedPassword);
           } catch (error) {
-            console.error('Failed to fetch user profile:', error);
+            console.error('❌ Failed to fetch user profile:', error);
             // If profile fetch fails, user might not be authenticated anymore
             // Clear authentication state
             setIsAuthenticated(false);
@@ -201,7 +244,11 @@ export default function HomePage() {
             localStorage.removeItem('token');
             localStorage.removeItem('userId');
           }
+        } else {
+          console.log('No authentication data found in localStorage');
         }
+      } else {
+        console.log('Window or localStorage not available');
       }
     };
     
@@ -255,7 +302,7 @@ export default function HomePage() {
     };
   }, [projects, selectedPage.projectId, selectedPage.pageId]);
 
-  // Initialize workspace data
+  // Initialize workspace data - OPTIMIZED VERSION
   const initializeWorkspace = async (providedPassword = null) => {
     try {
       setWorkspaceLoading(true);
@@ -263,7 +310,14 @@ export default function HomePage() {
       
       const passwordToUse = providedPassword || userPassword;
       
-      const workspaceData = await workspaceStateService.loadWorkspaceData(passwordToUse);
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Workspace loading timeout')), 30000)
+      );
+      
+      const workspaceDataPromise = workspaceStateService.loadWorkspaceData(passwordToUse);
+      
+      const workspaceData = await Promise.race([workspaceDataPromise, timeoutPromise]);
       
       // Check if any tabs need password for decryption
       const needsPassword = workspaceData.projects?.some(project =>
@@ -291,6 +345,7 @@ export default function HomePage() {
       }
       
       if (workspaceData.projects && workspaceData.projects.length > 0) {
+        // OPTIMIZED: Set projects immediately, then handle active state
         setProjects(workspaceData.projects);
         
         // Try to restore the last active state
@@ -310,11 +365,13 @@ export default function HomePage() {
               return project;
             });
             
-            setProjects(updatedProjects);
-            
-            setSelectedPage({ 
-              projectId: restoredState.activeProject.id, 
-              pageId: restoredState.activePage.id 
+            // OPTIMIZED: Batch state updates
+            React.startTransition(() => {
+              setProjects(updatedProjects);
+              setSelectedPage({ 
+                projectId: restoredState.activeProject.id, 
+                pageId: restoredState.activePage.id 
+              });
             });
           } else {
 
@@ -322,7 +379,9 @@ export default function HomePage() {
             const firstProject = workspaceData.projects[0];
             if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
               const firstPage = firstProject.pages[0];
-              setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+              React.startTransition(() => {
+                setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+              });
             }
           }
         } catch (activeStateError) {
@@ -331,7 +390,9 @@ export default function HomePage() {
           const firstProject = workspaceData.projects[0];
           if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
             const firstPage = firstProject.pages[0];
-            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+            React.startTransition(() => {
+              setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+            });
           }
         }
       } else {
@@ -340,23 +401,31 @@ export default function HomePage() {
         await workspaceStateService.initializeWorkspace();
         // Reload data after initialization
         const initializedData = await workspaceStateService.loadWorkspaceData();
-        console.log('✅ Setting initialized projects:', initializedData.projects);
-        setProjects(initializedData.projects);
+        console.log('Setting initialized projects:', initializedData.projects);
         
-        if (initializedData.projects && initializedData.projects.length > 0) {
-          const firstProject = initializedData.projects[0];
-          if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
-            const firstPage = firstProject.pages[0];
-            setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+        // OPTIMIZED: Batch state updates for new workspace
+        React.startTransition(() => {
+          setProjects(initializedData.projects);
+          
+          if (initializedData.projects && initializedData.projects.length > 0) {
+            const firstProject = initializedData.projects[0];
+            if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
+              const firstPage = firstProject.pages[0];
+              setSelectedPage({ projectId: firstProject.id, pageId: firstPage.id });
+            }
           }
-        }
+        });
       }
       
-      setWorkspaceLoaded(true);
+      // OPTIMIZED: Set workspace loaded with transition
+      React.startTransition(() => {
+        setWorkspaceLoaded(true);
+      });
       console.log('🎉 Workspace initialization completed!');
     } catch (error) {
       console.error('❌ Error initializing workspace:', error);
       setWorkspaceError(error.message);
+      setWorkspaceLoading(false);
       showToastNotification('Failed to load workspace: ' + error.message, 'error');
     } finally {
       setWorkspaceLoading(false);
@@ -497,7 +566,7 @@ export default function HomePage() {
           break;
           
         case 'TAB_UPDATED_OPTIMISTIC':
-          console.log('🔄 TAB_UPDATED_OPTIMISTIC:', change.tabId, 'updates:', change.updates);
+          console.log('TAB_UPDATED_OPTIMISTIC:', change.tabId, 'updates:', change.updates);
           setProjects(prev => prev.map(project => ({
             ...project,
             pages: (project.pages || []).map(page => ({
@@ -548,6 +617,72 @@ export default function HomePage() {
           })));
           break;
           
+        case 'TAB_DATA_REPLACED':
+          setProjects(prev => prev.map(project => ({
+            ...project,
+            pages: (project.pages || []).map(page => ({
+              ...page,
+              tabs: (page.tabs || []).map(tab => 
+                tab.id === change.tabId 
+                  ? { ...tab, mergedData: change.data }
+                  : tab
+              )
+            }))
+          })));
+          break;
+          
+        case 'TAB_DELETED_OPTIMISTIC':
+          // Optimistically remove the tab from the UI while preserving project expansion state
+          setProjects(prev => {
+            // Store current expansion states before the update
+            const expansionStates = new Map();
+            prev.forEach(project => {
+              const wasExpanded = project.isExpanded || project.expanded;
+              expansionStates.set(project.id, wasExpanded);
+            });
+            
+            const updatedProjects = prev.map(project => {
+              const preservedExpansion = expansionStates.get(project.id);
+              return {
+                ...project,
+                // Explicitly preserve project expansion state
+                isExpanded: preservedExpansion,
+                expanded: preservedExpansion,
+                pages: (project.pages || []).map(page => ({
+                  ...page,
+                  tabs: (page.tabs || []).filter(tab => tab.id !== change.tabId)
+                }))
+              };
+            });
+            
+            return updatedProjects;
+          });
+          break;
+          
+        case 'TAB_DELETED':
+          // Tab was successfully deleted from backend
+          console.log('Tab deleted successfully:', change.tabId);
+          // The optimistic update already removed it from the UI
+          break;
+          
+        case 'TAB_DELETE_FAILED':
+          // Tab deletion failed - reload the workspace to restore the tab
+          console.error('❌ Tab deletion failed:', change.tabId, change.error);
+          showToastNotification('Failed to delete tab: ' + change.error, 'error');
+          // Reload workspace to restore the failed deletion
+          initializeWorkspace(currentUserPassword);
+          break;
+          
+        case 'TAB_DATA_SAVED':
+          // Tab data was successfully saved to backend
+          console.log('Tab data saved successfully:', change.tabId);
+          break;
+          
+        case 'TAB_DATA_SAVE_FAILED':
+          // Tab data save failed - could implement rollback here if needed
+          console.error('❌ Tab data save failed:', change.tabId, change.error);
+          break;
+          
         case 'NOTIFICATION':
           showToastNotification(change.message, change.notificationType);
           break;
@@ -579,6 +714,12 @@ export default function HomePage() {
   
   // Add state for tab dropdown menu
   const [showTabDropdown, setShowTabDropdown] = useState(false);
+  const tabDropdownRef = useRef(null);
+  
+  // Debug wrapper for setShowTabDropdown
+  const debugSetShowTabDropdown = useCallback((value) => {
+    setShowTabDropdown(value);
+  }, [showTabDropdown]);
   
   // Add state for dropdown drag and drop
   const [dropdownDraggedTab, setDropdownDraggedTab] = useState(null);
@@ -765,10 +906,17 @@ export default function HomePage() {
   const handleTabDragStart = useCallback((e, tabId) => {
     e.stopPropagation();
     setIsDragging(true);
+    setIsDraggingTabToPage(true);
     setDraggedTab(tabId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', tabId.toString());
-  }, []);
+    // Store the source page information for cross-page movement
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      tabId: tabId,
+      sourceProjectId: selectedPage.projectId,
+      sourcePageId: selectedPage.pageId
+    }));
+  }, [selectedPage]);
 
   const handleTabDragOver = useCallback((e, tabId) => {
     e.preventDefault();
@@ -852,9 +1000,257 @@ export default function HomePage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    setIsDraggingTabToPage(false);
     setDraggedTab(null);
     setDragOverTab(null);
+    setDragOverPage(null);
   }, []);
+
+  // Function to move a tab from one page to another
+  const moveTabToPage = useCallback(async (tabId, sourceProjectId, sourcePageId, targetProjectId, targetPageId) => {
+    console.log(`Moving tab ${tabId} from page ${sourcePageId} to page ${targetPageId}`);
+    
+    const updatedProjects = [...projects];
+    const sourceProject = updatedProjects.find(p => p.id === sourceProjectId);
+    const targetProject = updatedProjects.find(p => p.id === targetProjectId);
+    
+    if (!sourceProject || !targetProject) {
+      throw new Error('Source or target project not found');
+    }
+    
+    const sourcePage = sourceProject.pages.find(p => p.id === sourcePageId);
+    const targetPage = targetProject.pages.find(p => p.id === targetPageId);
+    
+    if (!sourcePage || !targetPage) {
+      throw new Error('Source or target page not found');
+    }
+    
+    const sourceTabIndex = sourcePage.tabs.findIndex(tab => tab.id === tabId);
+    if (sourceTabIndex === -1) {
+      throw new Error('Source tab not found');
+    }
+    
+    const movedTab = sourcePage.tabs[sourceTabIndex];
+    
+    try {
+      console.log('Starting moveTabToPage function');
+      
+      // Step 1: Get the tab data before moving (to preserve it)
+      let tabData = null;
+      try {
+        if (encryptionEnabled && userPassword) {
+          tabData = await workspaceStateService.getTabDataForMerging(tabId, userPassword);
+        } else {
+          tabData = await workspaceApiService.getTabData(tabId);
+        }
+        console.log('Retrieved tab data for move:', tabData);
+      } catch (dataError) {
+        console.warn('⚠️ Could not retrieve tab data, will use template defaults:', dataError);
+        // Continue with move even if data retrieval fails
+      }
+      
+      // Step 2: Create new tab in target page
+      const originalTabName = movedTab.name;
+      const newTabType = movedTab.tabType || movedTab.type;
+      const position = targetPage.tabs.length; // Add at the end
+      
+      // Check for duplicate tab names in target page
+      const existingTabNames = targetPage.tabs.map(tab => tab.name);
+      const newTabName = handleDuplicateName(originalTabName, existingTabNames);
+      
+      console.log(`📝 Creating new tab "${newTabName}" in target page ${targetPageId}`);
+      if (newTabName !== originalTabName) {
+        console.log(`Tab name changed from "${originalTabName}" to "${newTabName}" to avoid duplicate`);
+      }
+      
+      const newTab = await workspaceApiService.createTab(targetPageId, newTabName, newTabType, position);
+              console.log('New tab created:', newTab);
+              console.log('New tab details:', {
+        id: newTab.id,
+        name: newTab.name,
+        type: newTab.type,
+        tabType: newTab.tabType,
+        position: newTab.position
+      });
+      
+              console.log('About to start Step 3: Copy tab data');
+      
+      // Step 3: Copy tab data to new tab if available
+      if (tabData && tabData.data) {
+        try {
+          console.log('Copying tab data to new tab');
+          if (encryptionEnabled && userPassword) {
+            await workspaceStateService.replaceTabDataEncrypted(newTab.id, tabData.data, userPassword);
+          } else {
+            await workspaceApiService.replaceTabDataSmart(newTab.id, tabData.data);
+          }
+                      console.log('Tab data copied successfully');
+        } catch (dataCopyError) {
+          console.warn('⚠️ Failed to copy tab data, continuing with move:', dataCopyError);
+        }
+      }
+      
+              console.log('About to start Step 4: Handle seismic results');
+      
+      // Step 4: Handle seismic results if this is a seismic tab
+      const originalTabKey = `${sourceProjectId}_${sourcePageId}_${tabId}`;
+      const newTabKey = `${targetProjectId}_${targetPageId}_${newTab.id}`;
+      
+                console.log('Checking seismic results for key:', originalTabKey);
+          console.log('Available seismic results keys:', Object.keys(seismicResults));
+      
+      if (seismicResults[originalTabKey]) {
+        console.log('🌊 Moving seismic results to new tab');
+        setSeismicResults(prev => ({
+          ...prev,
+          [newTabKey]: seismicResults[originalTabKey]
+        }));
+        // Remove from original location
+        setSeismicResults(prev => {
+          const updated = { ...prev };
+          delete updated[originalTabKey];
+          return updated;
+        });
+      } else {
+        console.log('🌊 No seismic results to move');
+      }
+      
+              console.log('About to start Step 5: Update local state');
+      
+      // Step 5: Update local state - remove from source, add to target
+              console.log('Starting state update...');
+              console.log('Source project ID:', sourceProjectId, 'Target project ID:', targetProjectId);
+        console.log('Source page ID:', sourcePageId, 'Target page ID:', targetPageId);
+      
+      const updatedProjectsAfterMove = updatedProjects.map(project => {
+                  console.log(`Processing project ${project.id}:`, project.name);
+        
+        // Handle case where source and target are the same project
+        if (project.id === sourceProjectId && project.id === targetProjectId) {
+                      console.log(`Processing same project for both source and target: ${sourceProjectId}`);
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+              if (page.id === sourcePageId && page.id === targetPageId) {
+                // Same page - remove the tab and add it back with new ID
+                console.log(`Processing same page for both source and target: ${sourcePageId}`);
+                const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+                const newTabs = [...filteredTabs, newTab];
+                                  console.log(`Same page: removed tab ${tabId}, added tab ${newTab.id}, total tabs:`, newTabs.length);
+                return {
+                  ...page,
+                  tabs: newTabs
+                };
+              } else if (page.id === sourcePageId) {
+                // Source page only - remove the tab
+                const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+                console.log(`Removed tab ${tabId} from source page ${sourcePageId}, remaining tabs:`, filteredTabs.length);
+                return {
+                  ...page,
+                  tabs: filteredTabs
+                };
+              } else if (page.id === targetPageId) {
+                // Target page only - add the new tab
+                console.log(`Target page ${targetPageId} before update:`, page.tabs.length, 'tabs');
+                const newTabs = [...page.tabs, newTab];
+                console.log(`Added tab ${newTab.id} to target page ${targetPageId}, total tabs:`, newTabs.length);
+                console.log(`New tabs array:`, newTabs.map(t => ({ id: t.id, name: t.name })));
+                return {
+                  ...page,
+                  tabs: newTabs
+                };
+              }
+              return page;
+            })
+          };
+        } else if (project.id === sourceProjectId) {
+          console.log(`Processing source project ${sourceProjectId}`);
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+                          if (page.id === sourcePageId) {
+              const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+              console.log(`Removed tab ${tabId} from source page ${sourcePageId}, remaining tabs:`, filteredTabs.length);
+              return {
+                ...page,
+                tabs: filteredTabs
+              };
+              }
+              return page;
+            })
+          };
+        } else if (project.id === targetProjectId) {
+          console.log(`Processing target project ${targetProjectId}`);
+          return {
+            ...project,
+            pages: project.pages.map(page => {
+              console.log(`Processing page ${page.id} in target project`);
+              if (page.id === targetPageId) {
+                console.log(`Target page ${targetPageId} before update:`, page.tabs.length, 'tabs');
+                const newTabs = [...page.tabs, newTab];
+                console.log(`Added tab ${newTab.id} to target page ${targetPageId}, total tabs:`, newTabs.length);
+                console.log(`New tabs array:`, newTabs.map(t => ({ id: t.id, name: t.name })));
+                return {
+                  ...page,
+                  tabs: newTabs
+                };
+              }
+              return page;
+            })
+          };
+        }
+        return project;
+      });
+      
+      console.log('Updating projects state with moved tab');
+      setProjects(updatedProjectsAfterMove);
+      
+      // Debug: Check if the state was updated correctly
+      setTimeout(() => {
+        const updatedTargetPage = updatedProjectsAfterMove
+          .find(p => p.id === targetProjectId)
+          ?.pages.find(p => p.id === targetPageId);
+        console.log(`After state update - Target page ${targetPageId} has ${updatedTargetPage?.tabs?.length || 0} tabs`);
+        if (updatedTargetPage?.tabs) {
+          console.log(`Target page tabs:`, updatedTargetPage.tabs.map(t => ({ id: t.id, name: t.name })));
+        }
+      }, 100);
+      
+      // Step 6: Update selected page if the moved tab was the active tab
+      if (selectedPage.projectId === sourceProjectId && selectedPage.pageId === sourcePageId) {
+        const updatedSourcePage = updatedProjectsAfterMove
+          .find(p => p.id === sourceProjectId)
+          ?.pages.find(p => p.id === sourcePageId);
+        
+        if (updatedSourcePage && updatedSourcePage.tabs.length > 0) {
+          // Select the first remaining tab in source page
+          setSelectedPage({ projectId: sourceProjectId, pageId: sourcePageId });
+        } else {
+          // If no tabs left in source page, select the target page
+          setSelectedPage({ projectId: targetProjectId, pageId: targetPageId });
+        }
+      }
+      
+      // Step 7: Delete the original tab
+      console.log('Deleting original tab');
+      await workspaceApiService.deleteTab(tabId);
+              console.log('Original tab deleted');
+      
+      // Step 8: Force a re-render to ensure UI updates
+              console.log('Forcing UI update');
+      setProjects(prevProjects => {
+        const forceUpdate = prevProjects.map(project => ({ ...project }));
+        return forceUpdate;
+      });
+      
+      showToastNotification(`Tab "${newTabName}" moved to "${targetPage.name}"`, 'success');
+      
+    } catch (error) {
+      console.error('Error moving tab:', error);
+      console.error('Error stack:', error.stack);
+      throw new Error(`Failed to move tab: ${error.message}`);
+    }
+  }, [projects, selectedPage, encryptionEnabled, userPassword, seismicResults]);
 
   // Project drag and drop handlers
   const handleProjectDragStart = useCallback((e, projectId) => {
@@ -927,7 +1323,11 @@ export default function HomePage() {
     if (draggedPage && (draggedPage.projectId !== projectId || draggedPage.pageId !== pageId)) {
       setDragOverPage({ projectId, pageId });
     }
-  }, [draggedPage]);
+    // Handle tab-to-page drag over
+    if (isDraggingTabToPage && draggedTab) {
+      setDragOverPage({ projectId, pageId });
+    }
+  }, [draggedPage, isDraggingTabToPage, draggedTab]);
 
   const handlePageDragLeave = useCallback((e) => {
     e.preventDefault();
@@ -938,6 +1338,30 @@ export default function HomePage() {
   const handlePageDrop = useCallback(async (e, targetProjectId, targetPageId) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Handle tab-to-page drop
+    if (isDraggingTabToPage && draggedTab) {
+      try {
+        const dragData = e.dataTransfer.getData('application/json');
+        if (dragData) {
+          const { sourceProjectId, sourcePageId } = JSON.parse(dragData);
+          
+          // Only allow dropping if it's a different page
+          if (sourceProjectId !== targetProjectId || sourcePageId !== targetPageId) {
+            await moveTabToPage(draggedTab, sourceProjectId, sourcePageId, targetProjectId, targetPageId);
+          }
+        }
+      } catch (error) {
+        console.error('Error moving tab to page:', error);
+        showToastNotification('Failed to move tab: ' + error.message, 'error');
+      }
+      // Reset all drag states
+      setIsDraggingTabToPage(false);
+      setDraggedTab(null);
+      setDragOverPage(null);
+      setIsDragging(false);
+      return;
+    }
     
     if (draggedPage && (draggedPage.projectId !== targetProjectId || draggedPage.pageId !== targetPageId)) {
       const updatedProjects = [...projects];
@@ -1037,9 +1461,15 @@ export default function HomePage() {
     if (tab) {
       // Collect all tab-specific data including merged data
       const originalTabKey = `${projectId}_${pageId}_${tabId}`;
+      
+      // Get the most up-to-date seismic results (local state takes precedence over database)
+      const localSeismicResults = seismicResults[originalTabKey] || null;
+      const databaseSeismicResults = tab.mergedData?.seismicResults || {};
+      const mostRecentSeismicResults = localSeismicResults || (databaseSeismicResults.site_class ? databaseSeismicResults : null);
+      
       const tabData = {
         seismicData: seismicTabData[originalTabKey] || null,
-        seismicResults: seismicResults[originalTabKey] || null,
+        seismicResults: mostRecentSeismicResults,  // Use the most recent results
         snowLoadData: snowLoadTabData[originalTabKey] || null,
         windLoadData: windLoadTabData[originalTabKey] || null,
         mergedData: tab.mergedData || null  // Include the complete merged data
@@ -1056,7 +1486,7 @@ export default function HomePage() {
         }
       };
       setClipboard(clipboardData);
-      console.log('✅ Tab copied to clipboard:', { 
+              console.log('Tab copied to clipboard:', { 
         operation: isCut ? 'cut' : 'copy', 
         tabName: tab.name, 
         hasData: !!tabData.mergedData,
@@ -1092,13 +1522,13 @@ export default function HomePage() {
           return p;
         });
         setProjects(updatedProjects);
-        console.log('✅ Tab removed from UI for cut operation (keeping data intact):', tabId);
+        console.log('Tab removed from UI for cut operation (keeping data intact):', tabId);
       }
     }
   }, [projects, selectedPage]);
 
   const pasteTabFromClipboard = useCallback(async (targetProjectId, targetPageId) => {
-    console.log('🔄 Attempting to paste tab from clipboard:', { 
+            console.log('Attempting to paste tab from clipboard:', { 
       hasClipboard: !!clipboard.data, 
       clipboardType: clipboard.type,
       targetProjectId,
@@ -1137,30 +1567,40 @@ export default function HomePage() {
     if (clipboard.type === 'cut') {
       // For cut operation: Delete original first, then create new with preserved data
       try {
-        console.log('🔄 Starting cut/paste operation for tab:', tab.id, 'name:', tab.name);
+        console.log('Starting cut/paste operation for tab:', tab.id, 'name:', tab.name);
         
         // Step 1: Delete the original tab from backend to avoid name conflicts
         await workspaceStateService.deleteTab(tab.id);
-        console.log('✅ Original tab deleted from backend:', tab.id);
+        console.log('Original tab deleted from backend:', tab.id);
         
         // Step 2: Wait a moment to ensure deletion is processed
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Step 3: Create new tab in target location with potentially same name
-        console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
+        console.log('Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
         // For paste to page, add to the end
         const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
         const position = targetPage?.tabs?.length || 0;
         const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
-        console.log('✅ New tab created in target location:', movedTab.id);
+        console.log('New tab created in target location:', movedTab.id);
         
         // Step 4: Restore the original data to the new tab (only delta data)
         if (tabData && tabData.mergedData) {
           const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
           if (Object.keys(deltaData).length > 0) {
-            await workspaceApiService.replaceTabData(movedTab.id, deltaData);
-            console.log('✅ Original delta data restored to new tab');
+            await workspaceApiService.replaceTabDataSmart(movedTab.id, deltaData);
+            console.log('Original delta data restored to new tab');
           }
+        }
+        
+        // Step 4.5: Restore seismic results to local state if they exist
+        if (tabData && tabData.seismicResults) {
+          const newTabKey = `${targetProjectId}_${targetPageId}_${movedTab.id}`;
+          setSeismicResults(prev => ({
+            ...prev,
+            [newTabKey]: tabData.seismicResults
+          }));
+          console.log('Seismic results restored to local state for moved tab');
         }
         
         // Step 5: Update local state with moved tab
@@ -1193,10 +1633,10 @@ export default function HomePage() {
         });
         
         setProjects(updatedProjects);
-        console.log('✅ Tab moved successfully (cut/paste):', newTabName);
+        console.log('Tab moved successfully (cut/paste):', newTabName);
         showToastNotification(`Tab "${newTabName}" moved successfully`, 'success');
       } catch (error) {
-        console.error('❌ Failed to move tab:', error);
+        console.error('Failed to move tab:', error);
         showToastNotification('Failed to move tab: ' + error.message, 'error');
       }
     } else {
@@ -1211,8 +1651,18 @@ export default function HomePage() {
         if (tabData && tabData.mergedData) {
           const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
           if (Object.keys(deltaData).length > 0) {
-            await workspaceApiService.replaceTabData(createdTab.id, deltaData);
+            await workspaceApiService.replaceTabDataSmart(createdTab.id, deltaData);
           }
+        }
+        
+        // Restore seismic results to local state if they exist
+        if (tabData && tabData.seismicResults) {
+          const newTabKey = `${targetProjectId}_${targetPageId}_${createdTab.id}`;
+          setSeismicResults(prev => ({
+            ...prev,
+            [newTabKey]: tabData.seismicResults
+          }));
+          console.log('Seismic results restored to local state for copied tab');
         }
         
         // Update local state with the new tab
@@ -1245,7 +1695,7 @@ export default function HomePage() {
         });
         
         setProjects(updatedProjects);
-        console.log('✅ Tab copied successfully:', newTabName);
+        console.log('Tab copied successfully:', newTabName);
         showToastNotification(`Tab "${newTabName}" copied successfully`, 'success');
       } catch (error) {
         console.error('❌ Failed to copy tab:', error);
@@ -1263,18 +1713,18 @@ export default function HomePage() {
   }, [clipboard, projects]);
 
   const pasteTabAfterSpecificTab = useCallback(async (targetProjectId, targetPageId, targetTabId) => {
-    console.log('🔄 Attempting to paste tab after specific tab:', { 
+        console.log('Attempting to paste tab after specific tab:', {
       hasClipboard: !!clipboard.data, 
       clipboardType: clipboard.type,
       targetTabId 
     });
     if (!clipboard.data || clipboard.type === null) {
-      console.log('❌ No clipboard data available');
+      console.log('No clipboard data available');
       return;
     }
     
     const { tab, tabData, sourceProjectId, sourcePageId, sourceTabId } = clipboard.data;
-    console.log('📋 Clipboard data:', { 
+            console.log('Clipboard data:', { 
       tabName: tab?.name, 
       tabType: tab?.type || tab?.tabType,
       hasTabData: !!tabData,
@@ -1288,14 +1738,14 @@ export default function HomePage() {
     
               // Check for duplicate names
     const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
-    console.log('🎯 Target page lookup:', { 
+            console.log('Target page lookup:', { 
       targetProjectId, 
       targetPageId, 
       foundPage: !!targetPage,
       pageTabsCount: targetPage?.tabs?.length || 0 
     });
     if (!targetPage) {
-      console.log('❌ Target page not found');
+              console.log('Target page not found');
       return;
     }
     
@@ -1318,7 +1768,7 @@ export default function HomePage() {
     const isSamePage = sourceProjectId === targetProjectId && sourcePageId === targetPageId;
     const isCutOperation = clipboard.type === 'cut';
     
-    console.log('🔄 Operation details:', { 
+            console.log('Operation details:', { 
       isSamePage, 
       isCutOperation, 
       finalTabName: newTabName 
@@ -1327,30 +1777,40 @@ export default function HomePage() {
     if (isCutOperation) {
       // For cut operation: Delete original first, then create new with preserved data
       try {
-        console.log('🔄 Starting cut/paste after tab operation for tab:', tab.id, 'name:', tab.name);
+        console.log('Starting cut/paste after tab operation for tab:', tab.id, 'name:', tab.name);
         
         // Step 1: Delete the original tab from backend to avoid name conflicts
         await workspaceStateService.deleteTab(tab.id);
-        console.log('✅ Original tab deleted from backend:', tab.id);
+        console.log('Original tab deleted from backend:', tab.id);
         
         // Step 2: Wait a moment to ensure deletion is processed
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Step 3: Create new tab in target location
-        console.log('🔄 Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
+        console.log('Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
         // Calculate position after the target tab
         const targetTabIndex = targetPage.tabs.findIndex(t => t.id === targetTabId);
         const position = targetTabIndex + 1;
         const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
-        console.log('✅ New tab created in target location:', movedTab.id);
+        console.log('New tab created in target location:', movedTab.id);
         
         // Step 4: Restore the original data to the new tab (only delta data)
         if (tabData && tabData.mergedData) {
           const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
           if (Object.keys(deltaData).length > 0) {
-            await workspaceApiService.replaceTabData(movedTab.id, deltaData);
-            console.log('✅ Original delta data restored to new tab');
+            await workspaceApiService.replaceTabDataSmart(movedTab.id, deltaData);
+            console.log('Original delta data restored to new tab');
           }
+        }
+        
+        // Step 4.5: Restore seismic results to local state if they exist
+        if (tabData && tabData.seismicResults) {
+          const newTabKey = `${targetProjectId}_${targetPageId}_${movedTab.id}`;
+          setSeismicResults(prev => ({
+            ...prev,
+            [newTabKey]: tabData.seismicResults
+          }));
+          console.log('Seismic results restored to local state for moved tab (after)');
         }
         
         // Update local state with moved tab in correct position
@@ -1390,11 +1850,11 @@ export default function HomePage() {
         });
         
         setProjects(updatedProjects);
-        console.log('✅ Tab moved successfully (cut/paste after tab):', newTabName);
-      } catch (error) {
-        console.error('❌ Failed to move tab:', error);
-        showToastNotification('Failed to move tab: ' + error.message, 'error');
-                }
+        console.log('Tab moved successfully (cut/paste after tab):', newTabName);
+              } catch (error) {
+          console.error('Failed to move tab:', error);
+          showToastNotification('Failed to move tab: ' + error.message, 'error');
+        }
     } else {
       // For copy operation: Create new tab (existing logic)
       try {
@@ -1407,9 +1867,19 @@ export default function HomePage() {
         if (tabData && tabData.mergedData) {
           const deltaData = tabTemplateService.extractDelta(tab.tabType || tab.type, tabData.mergedData);
           if (Object.keys(deltaData).length > 0) {
-            await workspaceApiService.replaceTabData(createdTab.id, deltaData);
+            await workspaceApiService.replaceTabDataSmart(createdTab.id, deltaData);
           }
-                }
+        }
+        
+        // Restore seismic results to local state if they exist
+        if (tabData && tabData.seismicResults) {
+          const newTabKey = `${targetProjectId}_${targetPageId}_${createdTab.id}`;
+          setSeismicResults(prev => ({
+            ...prev,
+            [newTabKey]: tabData.seismicResults
+          }));
+          console.log('Seismic results restored to local state for copied tab (after)');
+        }
                 
       // Update local state with the new tab
       const updatedProjects = projects.map(p => {
@@ -1449,9 +1919,9 @@ export default function HomePage() {
     });
     
     setProjects(updatedProjects);
-      console.log('✅ Tab pasted after specific tab successfully:', newTabName);
+              console.log('Tab pasted after specific tab successfully:', newTabName);
     } catch (error) {
-      console.error('❌ Failed to paste tab after specific tab:', error);
+              console.error('Failed to paste tab after specific tab:', error);
       showToastNotification('Failed to paste tab: ' + error.message, 'error');
     }
     } // Close the else block for copy operation
@@ -1564,10 +2034,26 @@ export default function HomePage() {
     if (contextMenu.show) {
       setContextMenu({ show: false, x: 0, y: 0, type: '', itemId: null });
     }
-    if (showTabDropdown) {
-      setShowTabDropdown(false);
+    if (showTabDropdown && tabDropdownRef.current) {
+      // Check if the click was inside the dropdown using ref
+      const isInsideDropdown = tabDropdownRef.current.contains(event.target);
+      
+      // Alternative check - look for any dropdown-related elements in the path
+      const clickPath = event.composedPath();
+      const hasDropdownInPath = clickPath.some(element => 
+        element === tabDropdownRef.current || 
+        (element.classList && (
+          element.classList.contains('hover:bg-destructive') ||
+          element.classList.contains('ml-2') ||
+          element.getAttribute && element.getAttribute('title') === 'Close Tab'
+        ))
+      );
+      
+      if (!isInsideDropdown && !hasDropdownInPath) {
+        debugSetShowTabDropdown(false);
+      }
     }
-  }, [contextMenu.show, showTabDropdown]);
+  }, [contextMenu.show, showTabDropdown, debugSetShowTabDropdown]);
 
   useEffect(() => {
     document.addEventListener('click', handleClickOutside);
@@ -1604,7 +2090,7 @@ export default function HomePage() {
 
   // Calculate probabilities for sediment types when seismic results are available from persisted data
   useEffect(() => {
-    console.log('🔍 Sediment probability useEffect triggered');
+            console.log('Sediment probability useEffect triggered');
     console.log('Projects:', projects.length);
     console.log('SedimentTypes:', sedimentTypes.length);
     
@@ -1633,7 +2119,7 @@ export default function HomePage() {
                       return norm1 && norm2 ? dot/(norm1*norm2) : 0;
                     });
                     setSedimentTypes(sedimentTypes.map((row, i) => ({ ...row, probability: probs[i] })));
-                    console.log('✅ Probabilities calculated and set!');
+                    console.log('Probabilities calculated and set!');
                   }
                 }
               }
@@ -1674,7 +2160,7 @@ export default function HomePage() {
           if (typeof window !== 'undefined' && window.sessionStorage) {
             sessionStorage.setItem('userPassword', password);
           }
-          console.log('🔐 Password stored for automatic encryption (memory + session)');
+          console.log('Password stored for automatic encryption (memory + session)');
           
           // Fetch user profile to ensure we have the latest data
                   try {
@@ -1692,16 +2178,16 @@ export default function HomePage() {
             console.log('📊 Loaded workspace data with automatic decryption:', workspaceData);
             
             if (workspaceData.projects && workspaceData.projects.length > 0) {
-              console.log('✅ Setting projects:', workspaceData.projects.length, 'projects');
+              console.log('Setting projects:', workspaceData.projects.length, 'projects');
               setProjects(workspaceData.projects);
               
               // Try to restore the last active state
               try {
                 const restoredState = await workspaceStateService.restoreActiveState(workspaceData);
-                console.log('🔄 Restored active state:', restoredState);
+                console.log('Restored active state:', restoredState);
                 
                 if (restoredState.activeProject && restoredState.activePage) {
-                  console.log('✅ Restoring last active project and page');
+                                      console.log('Restoring last active project and page');
                   
                   // Update the projects array with the restored expansion state
                   const updatedProjects = workspaceData.projects.map(project => {
@@ -1720,7 +2206,7 @@ export default function HomePage() {
                     pageId: restoredState.activePage.id
                   });
                 } else {
-                  console.log('🔄 No previous state, using first project/page');
+                  console.log('No previous state, using first project/page');
                   if (workspaceData.projects[0] && workspaceData.projects[0].pages && workspaceData.projects[0].pages[0]) {
                     setSelectedPage({
                       projectId: workspaceData.projects[0].id,
@@ -1732,7 +2218,7 @@ export default function HomePage() {
                 console.error('❌ Failed to restore active state:', error);
               }
             }
-            console.log('✅ Workspace initialized after login with encryption');
+            console.log('Workspace initialized after login with encryption');
           } catch (error) {
             console.error('❌ Failed to initialize workspace after login:', error);
             showToastNotification('Failed to load workspace: ' + error.message, 'error');
@@ -1794,7 +2280,7 @@ export default function HomePage() {
     setUserPassword('');
     setHasStoredApiKey(false);
     setApiKeyStatus(null);
-    console.log('🔐 Password cleared from session on logout');
+            console.log('Password cleared from session on logout');
   };
 
   // Toast notification helper
@@ -1947,10 +2433,10 @@ export default function HomePage() {
                   sa_x450: seismicResult.sa_x450
                 }
               };
-              console.log('🔍 Saving seismic results to database (decrypt path):', seismicResultsDelta);
-              console.log('🔍 Using tab ID:', tabId);
+              console.log('Saving seismic results to database (decrypt path):', seismicResultsDelta);
+                              console.log('Using tab ID:', tabId);
               await workspaceStateService.saveTabDataEncryptedImmediately(tabId, 'seismic', seismicResultsDelta, userPassword);
-              console.log('✅ Seismic results saved successfully (decrypt path)');
+                              console.log('Seismic results saved successfully (decrypt path)');
             } catch (error) {
               console.error('❌ Error saving seismic results (decrypt path):', error);
               // Don't show error to user as this is background save - the UI is already working
@@ -2147,7 +2633,7 @@ export default function HomePage() {
             // Create project in backend first
             const newProject = await workspaceStateService.createProject(newProjectName);
             const newProjectId = newProject.id; // Use the real ID from the returned project object
-            console.log('✅ Project copied to backend:', newProjectId);
+            console.log('Project copied to backend:', newProjectId);
             
             // Copy all pages from original project
             for (const originalPage of project.pages) {
@@ -2155,7 +2641,7 @@ export default function HomePage() {
               const newPageName = generateUniqueName(originalPage.name, pageNames);
               const newPage = await workspaceStateService.createPage(newProjectId, newPageName);
               const newPageId = newPage.id; // Use the real ID from the returned page object
-              console.log('✅ Page copied to backend:', newPageId);
+              console.log('Page copied to backend:', newPageId);
               
               // Copy all tabs from original page with their data
               if (originalPage.tabs && originalPage.tabs.length > 0) {
@@ -2165,7 +2651,7 @@ export default function HomePage() {
                   
                   // Create the tab
                   const createdTab = await workspaceStateService.createTab(newPageId, newTabName, originalTab.type || originalTab.tabType || 'design_tables');
-                  console.log('✅ Tab created:', newTabName);
+                  console.log('Tab created:', newTabName);
                   
                   // Copy the tab data if it exists
                   const originalTabKey = `${projectId}_${originalPage.id}_${originalTab.id}`;
@@ -2181,7 +2667,7 @@ export default function HomePage() {
                   if (tabData.mergedData || tabData.seismicData || tabData.snowLoadData || tabData.windLoadData) {
                     try {
                       await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
-                      console.log('✅ Tab data copied:', newTabName);
+                      console.log('Tab data copied:', newTabName);
                     } catch (error) {
                       console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
                     }
@@ -2203,7 +2689,7 @@ export default function HomePage() {
             
             // Then delete from backend
             await workspaceStateService.deleteProject(projectId);
-            console.log('✅ Project deleted from backend:', projectId);
+            console.log('Project deleted from backend:', projectId);
             showToastNotification(`Project "${project.name}" deleted successfully`, 'success');
           } catch (error) {
             console.error('❌ Failed to delete project:', error);
@@ -2238,7 +2724,7 @@ export default function HomePage() {
             // Create page in backend first
             const newPage = await workspaceStateService.createPage(projectId, newPageName);
             const newPageId = newPage.id; // Use the real ID from the returned page object
-            console.log('✅ Page copied to backend:', newPageId);
+            console.log('Page copied to backend:', newPageId);
             
             // Copy all tabs from original page with their data
             if (page.tabs && page.tabs.length > 0) {
@@ -2248,7 +2734,7 @@ export default function HomePage() {
                 
                 // Create the tab
                 const createdTab = await workspaceStateService.createTab(newPageId, newTabName, originalTab.type || originalTab.tabType || 'design_tables');
-                console.log('✅ Tab created:', newTabName);
+                console.log('Tab created:', newTabName);
                 
                 // Copy the tab data if it exists
                 const originalTabKey = `${projectId}_${pageId}_${originalTab.id}`;
@@ -2264,7 +2750,7 @@ export default function HomePage() {
                 if (tabData.mergedData || tabData.seismicData || tabData.snowLoadData || tabData.windLoadData) {
                   try {
                     await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
-                    console.log('✅ Tab data copied:', newTabName);
+                                          console.log('Tab data copied:', newTabName);
                   } catch (error) {
                     console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
                   }
@@ -2294,7 +2780,7 @@ export default function HomePage() {
             
             // Then delete from backend
             await workspaceStateService.deletePage(pageId);
-            console.log('✅ Page deleted from backend:', pageId);
+            console.log('Page deleted from backend:', pageId);
             showToastNotification(`Page "${page.name}" deleted successfully`, 'success');
           } catch (error) {
             console.error('❌ Failed to delete page:', error);
@@ -2371,7 +2857,7 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjects);
-            console.log('✅ Tab copied successfully:', newTabName);
+            console.log('Tab copied successfully:', newTabName);
           } catch (error) {
             console.error('❌ Failed to copy tab:', error);
             showToastNotification('Failed to copy tab: ' + error.message, 'error');
@@ -2424,7 +2910,7 @@ export default function HomePage() {
             const updatedPage = updatedProjectsRight.find(p => p.id === projectId).pages.find(p => p.id === pageId);
             await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
             
-            console.log('✅ New tab created to the right:', newTabNameRight);
+            console.log('New tab created to the right:', newTabNameRight);
           } catch (error) {
             console.error('❌ Failed to create new tab to the right:', error);
             showToastNotification('Failed to create new tab: ' + error.message, 'error');
@@ -2457,7 +2943,7 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsLock);
-            console.log('✅ Tab locked successfully');
+            console.log('Tab locked successfully');
           } catch (error) {
             console.error('❌ Failed to lock tab:', error);
             showToastNotification('Failed to lock tab: ' + error.message, 'error');
@@ -2490,7 +2976,7 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsUnlock);
-            console.log('✅ Tab unlocked successfully');
+            console.log('Tab unlocked successfully');
           } catch (error) {
             console.error('❌ Failed to unlock tab:', error);
             showToastNotification('Failed to unlock tab: ' + error.message, 'error');
@@ -2536,7 +3022,7 @@ export default function HomePage() {
             // Update display order in backend
             const updatedPage = updatedProjectsStart.find(p => p.id === projectId).pages.find(p => p.id === pageId);
             await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
-            console.log('✅ Tab moved to start successfully');
+            console.log('Tab moved to start successfully');
           } catch (error) {
             console.error('❌ Failed to move tab to start:', error);
             showToastNotification('Failed to move tab: ' + error.message, 'error');
@@ -2573,7 +3059,7 @@ export default function HomePage() {
             // Update display order in backend
             const updatedPage = updatedProjectsEnd.find(p => p.id === projectId).pages.find(p => p.id === pageId);
             await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
-            console.log('✅ Tab moved to end successfully');
+            console.log('Tab moved to end successfully');
           } catch (error) {
             console.error('❌ Failed to move tab to end:', error);
             showToastNotification('Failed to move tab: ' + error.message, 'error');
@@ -2717,6 +3203,116 @@ export default function HomePage() {
             showToastNotification('Failed to close all tabs: ' + error.message, 'error');
           }
           break;
+        case 'resetToTemplate':
+          // Reset tab to its default template state
+          try {
+            const tabKey = `${projectId}_${pageId}_${tabId}`;
+            
+            // Clear all local state for this tab
+            setSeismicResults(prev => ({ ...prev, [tabKey]: null }));
+            setSeismicTabData(prev => ({ ...prev, [tabKey]: {} }));
+            setSnowLoadTabData(prev => ({ ...prev, [tabKey]: {} }));
+            setWindLoadTabData(prev => ({ ...prev, [tabKey]: {} }));
+            
+            // Clear database data - replace with empty template data
+            const emptyTemplateData = {};
+            await workspaceApiService.replaceTabDataSmart(tabId, emptyTemplateData);
+            
+            // Immediately update the tab's mergedData to reflect the reset state
+            setProjects(prevProjects => prevProjects.map(p => {
+              if (p.id === projectId) {
+                return {
+                  ...p,
+                  pages: p.pages.map(pa => {
+                    if (pa.id === pageId) {
+                      return {
+                        ...pa,
+                        tabs: pa.tabs.map(t => {
+                          if (t.id === tabId) {
+                            return {
+                              ...t,
+                              mergedData: {}
+                            };
+                          }
+                          return t;
+                        })
+                      };
+                    }
+                    return pa;
+                  })
+                };
+              }
+              return p;
+            }));
+            
+            console.log('✅ Tab reset to template successfully');
+            showToastNotification('Tab reset to template successfully', 'success');
+          } catch (error) {
+            console.error('❌ Failed to reset tab to template:', error);
+            showToastNotification('Failed to reset tab: ' + error.message, 'error');
+          }
+          break;
+        case 'closeTabsToRight':
+          // Close all tabs to the right of the current tab (except locked tabs)
+          try {
+            const currentPage = project.pages.find(p => p.id === pageId);
+            const currentTabIndex = currentPage.tabs.findIndex(t => t.id === tabId);
+            
+            if (currentTabIndex === -1) {
+              console.error('❌ Current tab not found');
+              return;
+            }
+            
+            // Get all tabs to the right of the current tab (excluding locked tabs)
+            const tabsToDelete = currentPage.tabs
+              .slice(currentTabIndex + 1)
+              .filter(t => !t.locked && !t.isLocked);
+            
+            if (tabsToDelete.length === 0) {
+              console.log('📝 No tabs to close to the right');
+              return;
+            }
+            
+            // Delete tabs from backend
+            for (const tabToDelete of tabsToDelete) {
+              await workspaceStateService.deleteTab(tabToDelete.id);
+            }
+            
+            // Update frontend state
+            const updatedProjectsCloseToRight = projects.map(p => {
+              if (p.id === projectId) {
+                return {
+                  ...p,
+                  pages: p.pages.map(pa => {
+                    if (pa.id === pageId) {
+                      // Keep tabs up to and including the current tab, plus any locked tabs to the right
+                      const tabsToKeep = pa.tabs.slice(0, currentTabIndex + 1);
+                      const lockedTabsToRight = pa.tabs
+                        .slice(currentTabIndex + 1)
+                        .filter(t => t.locked || t.isLocked);
+                      
+                      const remainingTabs = [...tabsToKeep, ...lockedTabsToRight];
+                      
+                      return {
+                        ...pa,
+                        tabs: remainingTabs
+                      };
+                    }
+                    return pa;
+                  })
+                };
+              }
+              return p;
+            });
+            
+            setProjects(updatedProjectsCloseToRight);
+            console.log(`✅ Closed ${tabsToDelete.length} tabs to the right successfully`);
+            showToastNotification(`Closed ${tabsToDelete.length} tabs to the right`, 'success');
+          } catch (error) {
+            console.error('❌ Failed to close tabs to the right:', error);
+            showToastNotification('Failed to close tabs to the right: ' + error.message, 'error');
+          }
+          break;
         case 'closeThisTab':
           // Close the current tab
           try {
@@ -2779,88 +3375,76 @@ export default function HomePage() {
   };
 
   const closeTab = async (tabId) => {
+    console.log('🔄 closeTab called for:', tabId);
+    
+    // Check if this tab is already being deleted
+    if (deletingTabs.has(tabId)) {
+      console.warn('⚠️ Tab deletion already in progress:', tabId);
+      return;
+    }
+    
     const { projectId, pageId } = selectedPage;
     
-    // Find the tab to check if it's locked
+    // Find the tab to check if it's locked or if it even exists
     const project = projects.find(p => p.id === projectId);
     const page = project?.pages?.find(p => p.id === pageId);
     const tabToClose = page?.tabs?.find(tab => tab.id === tabId);
     
-    if (tabToClose && tabToClose.locked) {
+    // Check if tab exists and is not already being deleted
+    if (!tabToClose) {
+      console.warn('⚠️ Tab not found or already deleted:', tabId);
+      return;
+    }
+    
+    if (tabToClose.locked) {
+      console.warn('🔒 Cannot delete locked tab:', tabId);
       return; // Don't close locked tabs
     }
     
-    // Delete from backend first
+    // Mark this tab as being deleted
+    setDeletingTabs(prev => new Set(prev).add(tabId));
+    console.log('🗑️ Starting tab deletion process for:', tabId);
+    
+    // Delete using workspace state service (which handles optimistic updates and state preservation)
     try {
       await workspaceStateService.deleteTab(tabId);
-      console.log('✅ Tab deleted from backend:', tabId);
+      console.log('✅ Tab deletion completed successfully for:', tabId);
+      
+      // Note: Tab selection after deletion is handled by the UI automatically
+      // when the optimistic update removes the tab from the list
     } catch (error) {
-      console.error('❌ Failed to delete tab from backend:', error);
-      showToastNotification('Failed to delete tab: ' + error.message, 'error');
-      return; // Don't update frontend if backend deletion failed
-    }
-    
-    // Update frontend state
-    const updatedProjects = projects.map(project => {
-      if (project.id === projectId) {
-        return {
-          ...project,
-          pages: project.pages.map(page => {
-            if (page.id === pageId) {
-                const remainingTabs = page.tabs.filter(tab => tab.id !== tabId);
-              
-                // If no tabs left after closing, create a welcome tab
-                if (remainingTabs.length === 0) {
-                console.log('Creating Welcome tab - no tabs remaining');
-                  return {
-                    ...page,
-                  tabs: [{ 
-                    id: Date.now(), 
-                    name: 'Welcome', 
-                    type: 'Welcome', 
-                    isActive: true,
-                    active: true 
-                  }]
-                };
-              }
-              
-              // If we have remaining tabs, make sure at least one is active
-              const hasActiveTab = remainingTabs.some(tab => tab.isActive || tab.active);
-              if (!hasActiveTab && remainingTabs.length > 0) {
-                // Prefer to activate a non-Welcome tab if available
-                const nonWelcomeTab = remainingTabs.find(tab => 
-                  tab.type !== 'Welcome' && tab.tabType !== 'Welcome' && 
-                  tab.type !== 'welcome' && tab.tabType !== 'welcome'
-                );
-                
-                const tabToActivate = nonWelcomeTab || remainingTabs[0];
-                tabToActivate.isActive = true;
-                tabToActivate.active = true;
-                console.log('Auto-activating tab after close:', tabToActivate.name);
-              }
-              
-                return {
-                  ...page,
-                  tabs: remainingTabs
-                };
-            }
-            return page;
-          })
-        };
+      console.error('❌ Failed to delete tab:', tabId, error);
+      // Only show error notification if it's not a "Tab not found" error (which might be expected due to optimistic updates)
+      if (!error.message.includes('Tab not found')) {
+        showToastNotification('Failed to delete tab: ' + error.message, 'error');
       }
-      return project;
-    });
-    setProjects(updatedProjects);
+    } finally {
+      // Remove the tab from the deleting set
+      setDeletingTabs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tabId);
+        return newSet;
+      });
+      console.log('🧹 Removed tab from deleting set:', tabId);
+    }
   };
 
   const selectTab = async (tabId) => {
     const { projectId, pageId } = selectedPage;
+    
+    // Store current project expansion state
+    const project = projects.find(p => p.id === projectId);
+    const currentProjectExpanded = project?.isExpanded || project?.expanded || false;
+
     
     // Update local state immediately
     const updatedProjects = projects.map(project => {
       if (project.id === projectId) {
         return {
           ...project,
+          // Preserve project expansion state
+          isExpanded: currentProjectExpanded,
+          expanded: currentProjectExpanded,
           pages: project.pages.map(page => {
             if (page.id === pageId) {
               return {
@@ -2949,7 +3533,7 @@ export default function HomePage() {
       'Design Tables': 'design_tables',
       'Snow Load': 'snow_load', 
       'Wind Load': 'wind_load',
-      'Seismic Template': 'seismic'
+      'Seismic Hazards': 'seismic'
     };
     return mapping[displayName] || displayName;
   };
@@ -2962,7 +3546,7 @@ export default function HomePage() {
       'design_tables': 'Design Tables',
       'snow_load': 'Snow Load',
       'wind_load': 'Wind Load', 
-      'seismic': 'Seismic Template'
+      'seismic': 'Seismic Hazards'
     };
     return mapping[tabType] || 'Design Tables';
   };
@@ -3277,9 +3861,7 @@ export default function HomePage() {
                       />
                       {!isLogin && (
                         <div className="text-xs mt-1 p-3 rounded-md border border-muted bg-muted/50 text-muted-foreground flex items-center">
-                          <svg style={{ width: '12px', height: '12px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
+                          <Info size={12} className="mr-2" />
                           <span>Password must be at least 8 characters with at least one uppercase letter and one number.</span>
                         </div>
                       )}
@@ -3380,9 +3962,11 @@ export default function HomePage() {
                       }}
                       className="w-full h-12 flex items-center justify-center space-x-2"
                     >
-                      <svg style={{ width: '14px', height: '14px' }} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                      </svg>
+                      {isLogin ? (
+                        <ArrowRight size={14} className="text-primary-foreground" />
+                      ) : (
+                        <UserPlus size={14} className="text-primary-foreground" />
+                      )}
                       <span>{isLogin ? 'Sign In' : 'Register'}</span>
                     </Button>
                   </form>
@@ -3410,9 +3994,7 @@ export default function HomePage() {
                             className="w-1/2 h-12 flex items-center justify-center space-x-2"
                             type="button"
                           >
-                            <svg style={{ width: '16px', height: '16px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
+                            <ArrowRight size={16} className="text-foreground" />
                             <span>Need to register?</span>
                           </Button>
                           
@@ -3424,9 +4006,7 @@ export default function HomePage() {
                             className="w-1/2 h-12 flex items-center justify-center space-x-2"
                             type="button"
                           >
-                            <svg style={{ width: '16px', height: '16px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                            </svg>
+                            <Key size={16} className="text-foreground" />
                             <span>Forgot Password</span>
                           </Button>
                         </div>
@@ -3450,9 +4030,7 @@ export default function HomePage() {
                           variant="outline"
                           className="w-full h-12 flex items-center justify-center gap-2"
                         >
-                          <svg style={{ width: '12px', height: '12px' }} className="text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                          </svg>
+                          <ArrowLeft size={12} className="text-foreground" />
                           <span>Have an account?</span>
                         </Button>
                       </>
@@ -3461,13 +4039,9 @@ export default function HomePage() {
                     {/* Language selector */}
                     <div className="pt-2 flex justify-center">
                       <Button variant="outline" size="sm" className="h-12 px-4 flex items-center gap-1">
-                        <svg style={{ width: '12px', height: '12px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <Globe size={12} className="text-muted-foreground" />
                         <span>EN</span>
-                        <svg style={{ width: '8px', height: '8px' }} className="text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <ChevronDown size={8} className="text-muted-foreground" />
                       </Button>
                     </div>
 
@@ -3491,9 +4065,7 @@ export default function HomePage() {
                         size="sm"
                         className="h-12 px-4 flex items-center gap-1"
                       >
-                        <svg style={{ width: '12px', height: '12px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X size={12} className="text-gray-500" />
                         <span>Cancel</span>
                       </Button>
                     </div>
@@ -3503,7 +4075,7 @@ export default function HomePage() {
             ) : (
               <div className="text-center">
                 <h1 className="text-4xl font-bold text-foreground mb-4">
-                  Welcome to Our Platform
+                  Welcome to Construction Van
                 </h1>
                 <p className="text-xl text-muted-foreground mb-8">
                   Please sign in or register to continue
@@ -3513,9 +4085,7 @@ export default function HomePage() {
                   size="lg"
                   className="px-8 py-3 text-lg font-semibold flex items-center space-x-2 mx-auto"
                 >
-                  <svg style={{ width: '18px', height: '18px' }} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+                  <ArrowRight size={18} className="text-primary-foreground" />
                   <span>Get Started</span>
                 </Button>
               </div>
@@ -3551,18 +4121,14 @@ export default function HomePage() {
                   onClick={() => setShowErrorDialog(false)}
                   variant="ghost"
                   size="sm"
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X size={20} />
                 </Button>
               </div>
               <div className="flex items-center mb-4">
                 {errorMessage.includes('successful') && (
-                  <svg style={{ width: '20px', height: '20px' }} className="text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <CheckCircle size={20} className="text-green-500 mr-3 flex-shrink-0" />
                 )}
                 <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-foreground'}`}>{errorMessage}</p>
               </div>
@@ -3578,6 +4144,47 @@ export default function HomePage() {
             </div>
           </div>
         )}
+      </>
+    );
+  }
+
+  // If authenticated but workspace not loaded yet, show loading screen
+          console.log('Auth check - isAuthenticated:', isAuthenticated, 'workspaceLoaded:', workspaceLoaded);
+  if (!workspaceLoaded) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: scrollbarHideStyles }} />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            {workspaceLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <h2 className="text-xl font-semibold text-foreground mb-2">Loading Workspace...</h2>
+                <p className="text-muted-foreground">Please wait while we load your data</p>
+              </>
+            ) : workspaceError ? (
+              <>
+                <div className="text-destructive mb-4">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-2" />
+                </div>
+                <h2 className="text-xl font-semibold text-foreground mb-2">Failed to Load Workspace</h2>
+                <p className="text-muted-foreground mb-4">{workspaceError}</p>
+                <Button onClick={() => {
+                  setWorkspaceError(null);
+                  initializeWorkspace();
+                }}>
+                  Try Again
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="animate-pulse rounded-full h-12 w-12 bg-muted mx-auto mb-4"></div>
+                <h2 className="text-xl font-semibold text-foreground mb-2">Initializing...</h2>
+                <p className="text-muted-foreground">Setting up your workspace</p>
+              </>
+            )}
+          </div>
+        </div>
       </>
     );
   }
@@ -3603,7 +4210,7 @@ export default function HomePage() {
         <div className="flex items-center space-x-4">
           
           {/* Mode Toggle */}
-          <ModeToggle />
+          <ModeToggle userId={userId} />
           
           {/* API Key Status Indicator */}
           <div className="relative">
@@ -3625,9 +4232,7 @@ export default function HomePage() {
                   : 'API Key not stored - click to manage'
               }
             >
-              <svg style={{ width: '14px', height: '14px' }} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
+              <Key size={14} className="flex-shrink-0" />
               <span className="text-xs font-medium">
                 {apiKeyLoading ? 'Checking...' : (hasStoredApiKey ? 'API Key ✓' : 'API Key ○')}
               </span>
@@ -3645,10 +4250,7 @@ export default function HomePage() {
               className="text-gray-600 hover:text-gray-800" 
               title="Settings"
             >
-              <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <Settings size={16} className="text-gray-600" />
             </Button>
             
             {/* Settings Modal */}
@@ -3673,10 +4275,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'general' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
+                          <Settings size={16} className={`mr-3 ${selectedSettingCategory === 'general' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>General</span>
                         </Button>
                         
@@ -3690,9 +4289,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'notifications' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.19 4.19A2 2 0 004 6v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-1.81 1.19z" />
-                          </svg>
+                          <Bell size={16} className={`mr-3 ${selectedSettingCategory === 'notifications' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>Notifications</span>
                         </Button>
                         
@@ -3706,9 +4303,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'personalization' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
-                          </svg>
+                          <Palette size={16} className={`mr-3 ${selectedSettingCategory === 'personalization' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>Personalization</span>
                         </Button>
                         
@@ -3722,9 +4317,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'data' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z" />
-                          </svg>
+                          <Database size={16} className={`mr-3 ${selectedSettingCategory === 'data' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>Data Controls</span>
                         </Button>
                         
@@ -3738,9 +4331,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'security' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                          </svg>
+                          <Shield size={16} className={`mr-3 ${selectedSettingCategory === 'security' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>Security</span>
                         </Button>
                         
@@ -3754,9 +4345,7 @@ export default function HomePage() {
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           }`}
                         >
-                          <svg style={{ width: '16px', height: '16px' }} className={`mr-3 ${selectedSettingCategory === 'account' ? 'text-accent-foreground' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
+                          <User size={16} className={`mr-3 ${selectedSettingCategory === 'account' ? 'text-accent-foreground' : 'text-muted-foreground'}`} />
                           <span>Account</span>
                         </Button>
                       </div>
@@ -3804,9 +4393,7 @@ export default function HomePage() {
                             {apiKeySuccess && (
                               <div className="bg-green-50 border border-green-200 rounded-md p-3">
                                 <div className="flex items-center">
-                                  <svg style={{ width: '16px', height: '16px' }} className="text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
+                                  <CheckCircle size={16} className="text-green-500 mr-2" />
                                   <span className="text-sm text-green-800">{apiKeySuccess}</span>
                                 </div>
                               </div>
@@ -3814,9 +4401,7 @@ export default function HomePage() {
                             {apiKeyError && (
                               <div className="bg-red-50 border border-red-200 rounded-md p-3">
                                 <div className="flex items-center">
-                                  <svg style={{ width: '16px', height: '16px' }} className="text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
+                                  <X size={16} className="text-red-500 mr-2" />
                                   <span className="text-sm text-red-800">{apiKeyError}</span>
                                 </div>
                               </div>
@@ -3922,7 +4507,7 @@ export default function HomePage() {
                                     Your password secures your account and data.
                                   </div>
                                 </div>
-                                <Button size="sm" className="flex-shrink-0">
+                                <Button variant="outline" size="sm" className="flex-shrink-0">
                                   Change
                                 </Button>
                               </div>
@@ -3959,6 +4544,7 @@ export default function HomePage() {
                                     <span className="text-sm font-medium text-foreground">{username || 'Not set'}</span>
                                     {isAuthenticated && (
                                       <Button
+                                        variant="outline"
                                         onClick={() => {
                                           setNewUsername(username || '');
                                           setUsernameDialogError('');
@@ -4004,9 +4590,7 @@ export default function HomePage() {
                         <div>
                           <h4 className="text-lg font-semibold text-foreground mb-6 capitalize">{selectedSettingCategory}</h4>
                           <div className="text-center py-12">
-                            <svg style={{ width: '48px', height: '48px' }} className="mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
+                            <FileText size={48} className="mx-auto text-gray-400 mb-4" />
                             <p className="text-muted-foreground">Settings for {selectedSettingCategory} will be implemented soon.</p>
                           </div>
                         </div>
@@ -4023,9 +4607,7 @@ export default function HomePage() {
             className="text-gray-600 hover:text-gray-800"
             title="Logout"
           >
-            <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
+            <LogIn size={16} className="text-gray-600" />
           </Button>
         </div>
       </div>
@@ -4049,9 +4631,7 @@ export default function HomePage() {
                   className="p-1 hover:bg-accent bg-accent/50"
                   title="New Project"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <Plus size={14} className="text-primary" />
                 </Button>
               )}
               <Button
@@ -4061,9 +4641,11 @@ export default function HomePage() {
                 className="p-1 hover:bg-accent bg-muted"
                 title={sidebarCollapsed ? "Expand" : "Collapse"}
               >
-                <svg style={{ width: '14px', height: '14px' }} className={`text-gray-600 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                {sidebarCollapsed ? (
+                  <ChevronRight size={14} className="text-gray-600" />
+                ) : (
+                  <ChevronLeft size={14} className="text-gray-600" />
+                )}
               </Button>
             </div>
           </div>
@@ -4101,27 +4683,18 @@ export default function HomePage() {
                     onDragEnd={handleProjectDragEnd}
                   >
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden">
-                      <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                      </svg>
+                      <GripVertical size={12} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       {project.pages && project.pages.length > 0 && (
-                        <svg 
-                          style={{ width: '12px', height: '12px' }} 
+                        <ChevronRight 
+                          size={12} 
                           className={`text-muted-foreground mr-2 transition-transform ${(project.isExpanded || project.expanded) ? 'rotate-90' : ''} flex-shrink-0 cursor-pointer hover:text-foreground`} 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleProjectExpansion(project.id);
                           }}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                        />
                       )}
-                      <svg style={{ width: '14px', height: '14px' }} className="text-primary mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
+                      <Folder size={14} className="text-primary mr-2 flex-shrink-0" />
                       {editingItem.type === 'project' && editingItem.id === project.id ? (
                         <input
                           type="text"
@@ -4169,9 +4742,7 @@ export default function HomePage() {
                       className="p-1 opacity-0 group-hover:opacity-100 bg-green-100 hover:bg-green-200 dark:bg-green-900/20 dark:hover:bg-green-900/30"
                       title="Add Page"
                     >
-                      <svg style={{ width: '12px', height: '12px' }} className="text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
+                      <Plus size={12} className="text-green-600 dark:text-green-400" />
                     </Button>
                   </div>
                   
@@ -4253,6 +4824,8 @@ export default function HomePage() {
                               isDraggingPage && draggedPage?.projectId === project.id && draggedPage?.pageId === page.id ? 'opacity-50' : ''
                             } ${
                               dragOverPage?.projectId === project.id && dragOverPage?.pageId === page.id ? 'border-l-2 border-l-green-500 bg-green-100' : ''
+                            } ${
+                              isDraggingTabToPage && draggedTab && dragOverPage?.projectId === project.id && dragOverPage?.pageId === page.id ? 'border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''
                             }`}
                             style={{ 
                               marginLeft: '20px',
@@ -4267,17 +4840,53 @@ export default function HomePage() {
                             draggable={true}
                             onDragStart={(e) => handlePageDragStart(e, project.id, page.id)}
                             onDragEnter={(e) => handlePageDragOver(e, project.id, page.id)}
-                            onDragOver={(e) => handlePageDragOver(e, project.id, page.id)}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== page.id)) {
+                                setDragOverPage({ projectId: project.id, pageId: page.id });
+                              }
+                              // Handle tab-to-page drag over
+                              if (isDraggingTabToPage && draggedTab) {
+                                setDragOverPage({ projectId: project.id, pageId: page.id });
+                              }
+                            }}
                             onDragLeave={handlePageDragLeave}
-                            onDrop={(e) => handlePageDrop(e, project.id, page.id)}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              
+                              // Handle tab-to-page drop
+                              if (isDraggingTabToPage && draggedTab) {
+                                const dragData = e.dataTransfer.getData('application/json');
+                                if (dragData) {
+                                  try {
+                                    const { sourceProjectId, sourcePageId } = JSON.parse(dragData);
+                                    
+                                    // Only allow dropping if it's a different page
+                                    if (sourceProjectId !== project.id || sourcePageId !== page.id) {
+                                      moveTabToPage(draggedTab, sourceProjectId, sourcePageId, project.id, page.id);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error moving tab to page:', error);
+                                    showToastNotification('Failed to move tab: ' + error.message, 'error');
+                                  }
+                                }
+                                // Reset all drag states
+                                setIsDraggingTabToPage(false);
+                                setDraggedTab(null);
+                                setDragOverPage(null);
+                                setIsDragging(false);
+                                return;
+                              }
+                              
+                              // Handle page drop
+                              handlePageDrop(e, project.id, page.id);
+                            }}
                             onDragEnd={handlePageDragEnd}
                           >
-                            <svg style={{ width: '10px', height: '10px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                            </svg>
-                            <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
+                            <GripVertical size={10} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            <FileText size={12} className="text-gray-400 mr-2 flex-shrink-0" />
                             {editingItem.type === 'page' && editingItem.id.projectId === project.id && editingItem.id.pageId === page.id ? (
                               <input
                                 type="text"
@@ -4330,6 +4939,10 @@ export default function HomePage() {
                             if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'end')) {
                               setDragOverPage({ projectId: project.id, pageId: 'end' });
                             }
+                            // Handle tab-to-page drag over
+                            if (isDraggingTabToPage && draggedTab) {
+                              setDragOverPage({ projectId: project.id, pageId: 'end' });
+                            }
                           }}
                           onDragLeave={(e) => {
                             e.preventDefault();
@@ -4342,6 +4955,10 @@ export default function HomePage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (draggedPage && (draggedPage.projectId !== project.id || draggedPage.pageId !== 'end')) {
+                              handlePageDrop(e, project.id, 'end');
+                            }
+                            // Handle tab-to-page drop
+                            if (isDraggingTabToPage && draggedTab) {
                               handlePageDrop(e, project.id, 'end');
                             }
                           }}
@@ -4383,9 +5000,7 @@ export default function HomePage() {
                 className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 bg-card"
                 title="Scroll Left"
               >
-                <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                <ChevronLeft size={16} />
               </Button>
             )}
             
@@ -4401,6 +5016,8 @@ export default function HomePage() {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
                   const currentTabs = currentPage?.tabs || [];
+                  
+
                   
                   return currentTabs.map((tab, index) => (
                     <React.Fragment key={tab.id}>
@@ -4436,9 +5053,6 @@ export default function HomePage() {
                       onDragEnd={handleTabDragEnd}
                     >
                       <div className="flex items-center flex-1 min-w-0 overflow-hidden">
-                        <svg style={{ width: '12px', height: '12px' }} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
                         {editingItem.type === 'tab' && editingItem.id.projectId === selectedPage.projectId && editingItem.id.pageId === selectedPage.pageId && editingItem.id.tabId === tab.id ? (
                           <input
                             type="text"
@@ -4467,7 +5081,9 @@ export default function HomePage() {
                               style={{
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                WebkitMaskImage: 'linear-gradient(to right, black 0%, black 85%, transparent 100%)',
+                                maskImage: 'linear-gradient(to right, black 0%, black 85%, transparent 100%)'
                               }}
                               title={tab.name}
                             >
@@ -4487,16 +5103,12 @@ export default function HomePage() {
                           className="ml-2 p-1 opacity-0 group-hover:opacity-100 bg-red-100 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 flex-shrink-0"
                           title="Close Tab"
                         >
-                          <svg style={{ width: '10px', height: '10px' }} className="text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                          <X size={10} className="text-red-600 dark:text-red-400" />
                         </Button>
                       )}
                       {tab.locked && (
                         <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
-                          <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
+                          <Lock size={10} className="text-yellow-600 dark:text-yellow-400" />
                         </div>
                       )}
                     </div>
@@ -4515,9 +5127,7 @@ export default function HomePage() {
                 className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent flex-shrink-0 bg-card"
                 title="Scroll Right"
               >
-                <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight size={16} />
               </Button>
             )}
             
@@ -4528,21 +5138,20 @@ export default function HomePage() {
                 <Button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowTabDropdown(!showTabDropdown);
+                    debugSetShowTabDropdown(!showTabDropdown);
                   }}
                   variant="ghost"
                   size="sm"
                   className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent"
                   title="Tab Menu"
                 >
-                  <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <ChevronDown size={16} />
                 </Button>
                 
                 {/* Dropdown Menu - Right-aligned to dropdown button */}
                 {showTabDropdown && (
                   <div 
+                    ref={tabDropdownRef}
                     className="absolute top-full mt-1 bg-background border border-border rounded-md shadow-lg z-50"
                     style={{ 
                       right: '0',
@@ -4573,7 +5182,8 @@ export default function HomePage() {
                             onClick={async () => {
                               if (!isDropdownDragging) {
                                 await selectTab(tab.id);
-                                setShowTabDropdown(false);
+                                console.log('🚫 Tab click: Closing tab dropdown after selecting tab:', tab.id);
+                                debugSetShowTabDropdown(false);
                               }
                             }}
                             draggable={true}
@@ -4585,9 +5195,7 @@ export default function HomePage() {
                             onDragEnd={handleDropdownDragEnd}
                           >
                             <div className="flex items-center flex-1 min-w-0 overflow-hidden">
-                              <svg style={{ width: '12px', height: '12px' }} className="text-muted-foreground mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                              </svg>
+                              <GripVertical size={12} className="text-muted-foreground mr-2 flex-shrink-0" />
                               {editingItem.type === 'tab' && editingItem.id.projectId === selectedPage.projectId && editingItem.id.pageId === selectedPage.pageId && editingItem.id.tabId === tab.id ? (
                                 <input
                                   type="text"
@@ -4626,23 +5234,20 @@ export default function HomePage() {
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   await closeTab(tab.id);
-                                  setShowTabDropdown(false);
+                                  // Keep dropdown open for consecutive deletions
                                 }}
+                                disabled={deletingTabs.has(tab.id)}
                                 variant="ghost"
                                 size="sm"
-                                className="ml-2 p-1 hover:bg-destructive/10 hover:text-destructive"
-                                title="Close Tab"
+                                className={`ml-2 p-1 hover:bg-destructive/10 hover:text-destructive ${deletingTabs.has(tab.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={deletingTabs.has(tab.id) ? "Deleting..." : "Close Tab"}
                               >
-                                <svg style={{ width: '10px', height: '10px' }} className="text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <X size={10} className="text-gray-500" />
                               </Button>
                             )}
                             {tab.locked && (
                               <div className="ml-2 p-1 flex-shrink-0" title="Tab is locked">
-                                <svg style={{ width: '10px', height: '10px' }} className="text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
+                                <Lock size={10} className="text-yellow-600" />
                               </div>
                             )}
                           </div>
@@ -4661,9 +5266,7 @@ export default function HomePage() {
                 className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent bg-muted"
                 title="Add Tab"
               >
-                <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus size={16} />
               </Button>
             </div>
           </div>
@@ -4679,9 +5282,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
+                      <Key size={64} className="mx-auto mb-4 text-gray-400" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">No projects yet</h3>
                 <p className="text-muted-foreground">Create your first project and its page to start</p>
                     </div>
@@ -4697,9 +5298,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                      <FileText size={64} className="mx-auto mb-4 text-gray-400" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">No pages yet</h3>
                 <p className="text-muted-foreground">Add a page to your project to create tabs</p>
                     </div>
@@ -4712,9 +5311,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <svg style={{ width: '64px', height: '64px' }} className="mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
+                      <FileText size={64} className="mx-auto mb-4 text-gray-400" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">Select a page</h3>
                 <p className="text-muted-foreground">Choose a page from the sidebar to manage tabs</p>
                     </div>
@@ -4729,9 +5326,7 @@ export default function HomePage() {
                                   <div className="bg-card rounded-lg shadow-sm border border-border p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-foreground flex items-center space-x-2">
-                  <svg style={{ width: '16px', height: '16px' }} className="text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
+                  <FileText size={16} className="text-gray-600" />
                   <span>{activeTabForDisplay?.name || 'Welcome'}</span>
                 </h2>
                 <Select 
@@ -4750,7 +5345,7 @@ export default function HomePage() {
                     <SelectItem value="Design Tables">Design Tables</SelectItem>
                     <SelectItem value="Snow Load">Snow Load</SelectItem>
                     <SelectItem value="Wind Load">Wind Load</SelectItem>
-                    <SelectItem value="Seismic Template">Seismic Template</SelectItem>
+                    <SelectItem value="Seismic Hazards">Seismic Hazards</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -5196,7 +5791,7 @@ export default function HomePage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               <div className="space-y-3">
                                 <h5 className="font-medium text-purple-600 dark:text-purple-400">General Input</h5>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">a (m)</label>
                                   <NumberInput
                                     value={driftData.a}
@@ -5209,7 +5804,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Horizontal gap between upper and lower roofs</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">h (m)</label>
                                   <NumberInput
                                     value={driftData.h}
@@ -5222,7 +5817,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Difference in elevation between lower roof surface and top of the parapet of the upper roof</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">hp_lower (m)</label>
                                   <NumberInput
                                     value={driftData.hp_lower}
@@ -5235,7 +5830,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">parapet height of lower-roof source area</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">x (m)</label>
                                   <NumberInput
                                     value={driftData.x}
@@ -5252,7 +5847,7 @@ export default function HomePage() {
                               
                               <div className="space-y-3">
                                 <h5 className="font-medium text-purple-600 dark:text-purple-400">Case 1 Input</h5>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ws_upper (m)</label>
                                   <NumberInput
                                     value={driftData.ws_upper}
@@ -5265,7 +5860,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Shorter dimension of (upper roof) source area in Case 1</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ls_upper (m)</label>
                                   <NumberInput
                                     value={driftData.ls_upper}
@@ -5278,7 +5873,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Longer dimension of (upper roof) source area in Case 1</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">hp_upper (m)</label>
                                   <NumberInput
                                     value={driftData.hp_upper}
@@ -5295,7 +5890,7 @@ export default function HomePage() {
                               
                               <div className="space-y-3">
                                 <h5 className="font-medium text-purple-600 dark:text-purple-400">Case 2 & 3 Input</h5>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ws_lower2 (m)</label>
                                   <NumberInput
                                     value={driftData.ws_lower2}
@@ -5308,7 +5903,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Shorter dimension of (lower roof) source area in Case 2</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ls_lower2 (m)</label>
                                   <NumberInput
                                     value={driftData.ls_lower2}
@@ -5321,7 +5916,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Longer dimension of (lower roof) source area in Case 2</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ws_lower3 (m)</label>
                                   <NumberInput
                                     value={driftData.ws_lower3}
@@ -5334,7 +5929,7 @@ export default function HomePage() {
                                   />
                                   <span className="text-xs text-muted-foreground">Shorter dimension of (lower roof) source area in Case 3</span>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 items-center">
+                                <div className="grid grid-cols-[100px_120px_1fr] gap-3 items-center">
                                   <label className="text-sm font-medium">ls_lower3 (m)</label>
                                   <NumberInput
                                     value={driftData.ls_lower3}
@@ -5965,6 +6560,9 @@ export default function HomePage() {
                     const persistedSeismicResults = activeTabForDisplay.mergedData?.seismicResults || {};
                     const localSeismicResults = seismicResults[tabKey] || null;
                     const seismicResult = localSeismicResults || (persistedSeismicResults.site_class ? persistedSeismicResults : null);
+                    
+                    // Ensure seismicResult is null if it's an empty object (for proper table hiding)
+                    const finalSeismicResult = seismicResult && Object.keys(seismicResult).length > 0 && seismicResult.site_class ? seismicResult : null;
                     const handleChange = async (field, value) => {
                       // Update local state immediately for responsive UI
                       setSeismicTabData(prev => ({
@@ -6144,6 +6742,7 @@ export default function HomePage() {
                           {/* Retrieve Data Button */}
                           <div className="flex justify-center mt-6">
                             <Button
+                              variant="outline"
                               onClick={async () => {
                                 setSeismicFormError("");
                                 setSeismicResults(prev => ({
@@ -6309,9 +6908,34 @@ export default function HomePage() {
                               
                               // Clear data from database as well
                               try {
-                                // Use the new replace method to completely replace with empty object
-                                await workspaceApiService.replaceTabData(activeTabForDisplay.id, {});
-                                console.log('✅ Seismic data completely replaced with empty object in database');
+                                // Clear both form data and seismic results from database
+                                const emptyData = {
+                                  seismicTabData: {},
+                                  seismicResults: {}  // Explicitly clear seismic results
+                                };
+                                await workspaceApiService.replaceTabDataSmart(activeTabForDisplay.id, emptyData);
+                                console.log('✅ Seismic data and results completely cleared from database');
+                                
+                                // Immediately update the tab's mergedData to reflect the cleared state
+                                setProjects(prevProjects => prevProjects.map(project => ({
+                                  ...project,
+                                  pages: project.pages.map(page => ({
+                                    ...page,
+                                    tabs: page.tabs.map(tab => {
+                                      if (tab.id === activeTabForDisplay.id) {
+                                        return {
+                                          ...tab,
+                                          mergedData: {
+                                            ...tab.mergedData,
+                                            seismicTabData: {},
+                                            seismicResults: {}
+                                          }
+                                        };
+                                      }
+                                      return tab;
+                                    })
+                                  }))
+                                })));
                               } catch (error) {
                                 console.error('Error clearing seismic data:', error);
                                 showToastNotification('Failed to clear data: ' + error.message, 'error');
@@ -6330,18 +6954,18 @@ export default function HomePage() {
                       )}
                       
                       {/* Seismic Results Table */}
-                      {seismicResult && (
+                      {finalSeismicResult && (
                         <div className="mb-6">
-                          <SeismicResultsTable seismicResult={seismicResult} />
+                          <SeismicResultsTable seismicResult={finalSeismicResult} />
                         </div>
                       )}
                       
                       {/* Sediment Types Table */}
-                      {seismicResult && sedimentTypes.length > 0 && (
+                      {finalSeismicResult && sedimentTypes.length > 0 && (
                         <div className="mb-6">
                           <SedimentTypesTable 
                             sedimentTypes={sedimentTypes} 
-                            seismicResult={seismicResult} 
+                            seismicResult={finalSeismicResult} 
                           />
                         </div>
                       )}
@@ -6408,7 +7032,7 @@ export default function HomePage() {
 
       {/* Context Menu */}
       {contextMenu.show && (
-        <Card className="fixed z-50 py-1" style={{ left: contextMenu.x, top: contextMenu.y }}>
+        <Card className="fixed z-50 py-1 w-fit max-w-[250px]" style={{ left: contextMenu.x, top: contextMenu.y }}>
           <CardContent className="p-0">
             {contextMenu.type === 'project' && (
               <>
@@ -6417,9 +7041,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
+                  <Edit size={14} className="mr-2" />
                   <span>Rename</span>
                 </Button>
                 <Button
@@ -6427,9 +7049,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
+                  <Copy size={14} className="mr-2" />
                   <span>Copy</span>
                 </Button>
                 <Button
@@ -6437,9 +7057,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <Trash2 size={14} className="mr-2" />
                   <span>Delete</span>
                 </Button>
                 <Button
@@ -6447,9 +7065,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <Plus size={14} className="mr-2" />
                   <span>New Page</span>
                 </Button>
               </>
@@ -6462,9 +7078,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <Edit size={14} className="mr-2" />
                 <span>Rename</span>
               </Button>
               <Button
@@ -6472,9 +7086,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Copy size={14} className="mr-2" />
                 <span>Copy</span>
               </Button>
               <Button
@@ -6482,9 +7094,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Trash2 size={14} className="mr-2" />
                 <span>Delete</span>
               </Button>
               
@@ -6494,9 +7104,7 @@ export default function HomePage() {
                   variant="ghost"
                   className="w-full justify-start px-4 py-2 h-auto"
                 >
-                  <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <FileText size={14} className="mr-2 text-purple-600 dark:text-purple-400" />
                   <span>Paste Tab</span>
                 </Button>
               )}
@@ -6510,9 +7118,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <Edit size={14} className="mr-2 text-blue-600" />
                 <span>Rename</span>
               </Button>
               
@@ -6521,9 +7127,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Copy size={14} className="mr-2 text-green-600" />
                 <span>Copy this tab</span>
               </Button>
               
@@ -6532,9 +7136,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Copy size={14} className="mr-2 text-blue-600" />
                 <span>Copy to Clipboard</span>
               </Button>
               
@@ -6543,9 +7145,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Scissors size={14} className="mr-2 text-orange-600" />
                 <span>Cut to Clipboard</span>
               </Button>
               
@@ -6555,9 +7155,7 @@ export default function HomePage() {
                     variant="ghost"
                     className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} className="mr-2 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
+                    <FileText size={14} className="mr-2 text-purple-600 dark:text-purple-400" />
                     <span>Paste after this tab</span>
                   </Button>
                 )}
@@ -6569,9 +7167,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus size={14} className="mr-2" />
                 <span>New Tab to the Right</span>
               </Button>
               
@@ -6586,9 +7182,7 @@ export default function HomePage() {
                     variant="ghost"
                     className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                    </svg>
+                    <Unlock size={14} className="mr-2" />
                     <span>Unlock Tab</span>
                   </Button>
                 ) : (
@@ -6597,9 +7191,7 @@ export default function HomePage() {
                     variant="ghost"
                     className="w-full justify-start px-4 py-2 h-auto"
                   >
-                    <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
+                    <Lock size={14} className="mr-2" />
                     <span>Lock Tab</span>
                   </Button>
                 );
@@ -6608,13 +7200,22 @@ export default function HomePage() {
               <div className="border-t border-gray-200 my-1"></div>
               
               <Button
+                onClick={() => handleContextMenuAction('resetToTemplate')}
+                variant="ghost"
+                className="w-full justify-start px-4 py-2 h-auto hover:bg-orange-100 text-orange-600"
+              >
+                <RefreshCw size={14} className="mr-2" />
+                <span>Reset to Template</span>
+              </Button>
+              
+              <div className="border-t border-gray-200 my-1"></div>
+              
+              <Button
                 onClick={() => handleContextMenuAction('moveToStart')}
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                </svg>
+                <ChevronLeft size={14} className="mr-2" />
                 <span>Move to Start</span>
               </Button>
               
@@ -6623,9 +7224,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                </svg>
+                <ChevronRight size={14} className="mr-2" />
                 <span>Move to End</span>
               </Button>
               
@@ -6636,20 +7235,39 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={14} className="mr-2" />
                 <span>Close Other Tabs</span>
               </Button>
+              
+              {(() => {
+                const { projectId, pageId } = selectedPage;
+                const project = projects.find(p => p.id === projectId);
+                const page = project?.pages.find(p => p.id === pageId);
+                const currentTabIndex = page?.tabs.findIndex(t => t.id === contextMenu.itemId) ?? -1;
+                const tabsToRight = page?.tabs.slice(currentTabIndex + 1).filter(t => !t.locked && !t.isLocked) ?? [];
+                
+                // Only show if there are tabs to the right that can be closed
+                if (tabsToRight.length > 0) {
+                  return (
+                    <Button
+                      onClick={() => handleContextMenuAction('closeTabsToRight')}
+                      variant="ghost"
+                      className="w-full justify-start px-4 py-2 h-auto"
+                    >
+                      <X size={14} className="mr-2" />
+                      <span>Close Tabs to Right ({tabsToRight.length})</span>
+                    </Button>
+                  );
+                }
+                return null;
+              })()}
               
               <Button
                 onClick={() => handleContextMenuAction('closeAll')}
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto"
               >
-                <svg style={{ width: '14px', height: '14px' }} className="mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={14} className="mr-2" />
                 <span>Close All Tabs</span>
               </Button>
               
@@ -6660,9 +7278,7 @@ export default function HomePage() {
                 variant="ghost"
                 className="w-full justify-start px-4 py-2 h-auto hover:bg-red-100 text-red-600"
               >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={14} />
                 <span>Close this tab</span>
               </Button>
             </>
@@ -6696,16 +7312,12 @@ export default function HomePage() {
                 size="sm"
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={20} />
               </Button>
             </div>
             
             <div className="flex items-center mb-4">
-              <svg style={{ width: '20px', height: '20px' }} className="text-blue-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+                            <Info size={20} className="text-blue-500 mr-3 flex-shrink-0" />
               <div className="text-gray-700 flex-1">
                 <h4 className="font-semibold mb-2 text-gray-800">How we protect your API key:</h4>
                 <ul className="list-disc list-inside space-y-1 text-sm">
@@ -6739,18 +7351,14 @@ export default function HomePage() {
           <DialogContent className="max-w-md flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle className="flex items-center">
-                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <CheckCircle size={20} className="text-primary mr-2" />
                 Store API Key Securely
               </DialogTitle>
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="flex items-start">
-                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <CheckCircle size={20} className="text-primary mr-3 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-muted-foreground">
                   Your API key was used successfully. Would you like to store it securely so you don't need to enter it again?
                 </p>
@@ -6799,6 +7407,7 @@ export default function HomePage() {
                 Don't Store
               </Button>
               <Button
+                variant="outline"
                 onClick={() => {
                   const currentProject = projects.find(p => p.id === selectedPage.projectId);
                   const currentPage = currentProject?.pages.find(p => p.id === selectedPage.pageId);
@@ -6833,18 +7442,14 @@ export default function HomePage() {
           <DialogContent className="max-w-md flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle className="flex items-center">
-                <svg style={{ width: '20px', height: '20px' }} className="text-destructive mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
+                <AlertTriangle size={20} className="text-destructive mr-2" />
                 Delete API Key
               </DialogTitle>
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="flex items-start">
-                <svg style={{ width: '20px', height: '20px' }} className="text-destructive mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
+                <AlertTriangle size={20} className="text-destructive mr-3 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-muted-foreground">
                   Are you sure you want to delete your stored API key? You'll need to enter it again when using seismic features.
                 </p>
@@ -6903,17 +7508,13 @@ export default function HomePage() {
           <DialogContent className="max-w-md flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle className="flex items-center">
-                <svg style={{ width: '24px', height: '24px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+                <Lock size={24} className="text-primary mr-2" />
                 Decrypt API Key
               </DialogTitle>
             </DialogHeader>
             
             <div className="flex items-center mb-6">
-              <svg style={{ width: '24px', height: '24px' }} className="text-primary mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+              <Lock size={24} className="text-primary mr-4 flex-shrink-0" />
               <p className="text-sm text-muted-foreground">
                 Enter your password to decrypt your stored API key for seismic analysis.
               </p>
@@ -6957,6 +7558,7 @@ export default function HomePage() {
                 Cancel
               </Button>
               <Button
+                variant="outline"
                 onClick={handleSeismicDecrypt}
                 disabled={seismicDecryptLoading}
               >
@@ -7017,6 +7619,7 @@ export default function HomePage() {
                 Skip
               </Button>
               <Button
+                variant="outline"
                 onClick={() => {
                   const passwordInput = document.querySelector('#password-input');
                   const password = passwordInput?.value;
@@ -7042,23 +7645,19 @@ export default function HomePage() {
               ? 'bg-blue-50 border-blue-200 text-blue-800'
               : 'bg-red-50 border-red-200 text-red-800'
           }`}>
-            <svg style={{ width: '20px', height: '20px' }} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {toastType === 'success' ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              ) : toastType === 'info' ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              )}
-            </svg>
+            {toastType === 'success' ? (
+              <CheckCircle size={20} className="flex-shrink-0" />
+            ) : toastType === 'info' ? (
+              <Info size={20} className="flex-shrink-0" />
+            ) : (
+              <X size={20} className="flex-shrink-0" />
+            )}
             <span className="text-sm font-medium">{toastMessage}</span>
             <button
               onClick={() => setShowToast(false)}
               className="text-gray-400 hover:text-gray-600 transition"
             >
-              <svg style={{ width: '16px', height: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -7074,9 +7673,7 @@ export default function HomePage() {
           <DialogContent className="max-w-md flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle className="flex items-center">
-                <svg style={{ width: '20px', height: '20px' }} className="text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+                <User size={20} className="text-primary mr-2" />
                 Change Username
               </DialogTitle>
             </DialogHeader>
@@ -7119,6 +7716,7 @@ export default function HomePage() {
                 Cancel
               </Button>
               <Button
+                variant="outline"
                 onClick={handleUsernameUpdate}
                 disabled={usernameLoading}
               >

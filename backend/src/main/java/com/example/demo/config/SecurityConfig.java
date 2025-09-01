@@ -70,6 +70,9 @@ public class SecurityConfig {
             // allow workspace endpoints (requires authentication)
             .requestMatchers("/api/workspace/**").authenticated()
 
+            // allow user preference endpoints (requires authentication)
+            .requestMatchers("/api/preferences/**").authenticated()
+
             // allow OPTIONS on everything (for CORS preflight)
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 

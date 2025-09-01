@@ -42,13 +42,18 @@ POSTGRES_PASSWORD=your_secure_password
 ### 4. Required Database Tables (Auto-Created)
 The following tables will be automatically created:
 
-| Table Name | Purpose | Auto-Created |
+| Table Name | Purpose | Encrypted Data |
 |------------|---------|--------------|
 | `registers` | User accounts | ✅ Yes |
-| `user_preferences` | Encrypted API keys | ✅ Yes |
-| `sediment_types` | Soil classification data | ✅ Yes |
-| `snow_load_values` | Snow load data by city | ✅ Yes |
-| `wind_load_values` | Wind load data by city | ✅ Yes |
+| `user_api` | Encrypted API keys | ✅ Yes |
+| `user_preferences` | Theme preference | No |
+| `sediment_types` | Soil classification data | No |
+| `snow_load_values` | Snow load data by city | No |
+| `wind_load_values` | Wind load data by city | No |
+| `projects` | Projects basic data | No |
+| `pages` | Pages basic data | No |
+| `tabs` | Tabs basic data | No |
+| `tab_data` | Encrypted tab content data | ✅ Yes |
 
 ### 5. Start the Application
 ```bash

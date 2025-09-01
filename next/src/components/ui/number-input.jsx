@@ -16,10 +16,15 @@ const NumberInput = React.forwardRef(({
   precision = 1, // Number of decimal places
   ...props 
 }, ref) => {
-  const [internalValue, setInternalValue] = React.useState(value || 0)
+  // Initialize internal value with proper formatting
+  const [internalValue, setInternalValue] = React.useState(() => {
+    const initialValue = value !== undefined ? value : 0
+    return Number(initialValue.toFixed(precision))
+  })
   
   const formatValue = React.useCallback((val) => {
-    return Number(val.toFixed(precision))
+    const numVal = Number(val)
+    return Number(numVal.toFixed(precision))
   }, [precision])
 
   const handleValueChange = React.useCallback((newValue) => {
@@ -44,12 +49,14 @@ const NumberInput = React.forwardRef(({
   }, [min, max, onChange, onValueChange, formatValue])
 
   const increment = React.useCallback(() => {
-    const newValue = (internalValue || 0) + step
+    const currentValue = internalValue || 0
+    const newValue = currentValue + step
     handleValueChange(newValue)
   }, [internalValue, step, handleValueChange])
 
   const decrement = React.useCallback(() => {
-    const newValue = (internalValue || 0) - step
+    const currentValue = internalValue || 0
+    const newValue = currentValue - step
     handleValueChange(newValue)
   }, [internalValue, step, handleValueChange])
 
@@ -68,10 +75,16 @@ const NumberInput = React.forwardRef(({
     }
   }, [handleValueChange, onChange, onValueChange])
 
-  // Sync with external value changes
+  // Sync with external value changes - improved comparison
   React.useEffect(() => {
-    if (value !== undefined && value !== internalValue) {
-      setInternalValue(formatValue(value))
+    if (value !== undefined) {
+      const formattedExternalValue = formatValue(value)
+      const formattedInternalValue = formatValue(internalValue)
+      
+      // Compare formatted values to avoid floating point precision issues
+      if (Math.abs(formattedExternalValue - formattedInternalValue) > 0.001) {
+        setInternalValue(formattedExternalValue)
+      }
     }
   }, [value, internalValue, formatValue])
 
