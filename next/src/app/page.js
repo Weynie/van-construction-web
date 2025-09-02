@@ -45,7 +45,7 @@ const scrollbarHideStyles = `
 `;
 
 export default function HomePage() {
-  console.log('🚀 HomePage component rendered');
+  console.log('HomePage component rendered');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -818,14 +818,14 @@ export default function HomePage() {
       case 'page':
         if (projectId) {
           const project = projects.find(p => p.id === projectId);
-          return project ? project.pages.map(p => p.name) : [];
+          return project && project.pages ? project.pages.map(p => p.name) : [];
         }
         return [];
       case 'tab':
         if (projectId && pageId) {
           const project = projects.find(p => p.id === projectId);
-          const page = project?.pages.find(p => p.id === pageId);
-          return page ? page.tabs.map(t => t.name) : [];
+          const page = project?.pages?.find(p => p.id === pageId);
+          return page && page.tabs ? page.tabs.map(t => t.name) : [];
         }
         return [];
       default:
@@ -953,9 +953,9 @@ export default function HomePage() {
         if (project.id === projectId) {
           return {
             ...project,
-            pages: project.pages.map(page => {
+            pages: (project.pages || []).map(page => {
               if (page.id === pageId) {
-                const tabs = [...page.tabs];
+                const tabs = [...(page.tabs || [])];
                 const draggedIndex = tabs.findIndex(tab => tab.id === draggedTab);
                 const targetIndex = tabs.findIndex(tab => tab.id === targetTabId);
                 
@@ -1018,14 +1018,14 @@ export default function HomePage() {
       throw new Error('Source or target project not found');
     }
     
-    const sourcePage = sourceProject.pages.find(p => p.id === sourcePageId);
-    const targetPage = targetProject.pages.find(p => p.id === targetPageId);
+    const sourcePage = sourceProject.pages?.find(p => p.id === sourcePageId);
+    const targetPage = targetProject.pages?.find(p => p.id === targetPageId);
     
     if (!sourcePage || !targetPage) {
       throw new Error('Source or target page not found');
     }
     
-    const sourceTabIndex = sourcePage.tabs.findIndex(tab => tab.id === tabId);
+    const sourceTabIndex = sourcePage.tabs?.findIndex(tab => tab.id === tabId) || -1;
     if (sourceTabIndex === -1) {
       throw new Error('Source tab not found');
     }
@@ -1052,10 +1052,10 @@ export default function HomePage() {
       // Step 2: Create new tab in target page
       const originalTabName = movedTab.name;
       const newTabType = movedTab.tabType || movedTab.type;
-      const position = targetPage.tabs.length; // Add at the end
+      const position = (targetPage.tabs || []).length; // Add at the end
       
       // Check for duplicate tab names in target page
-      const existingTabNames = targetPage.tabs.map(tab => tab.name);
+      const existingTabNames = (targetPage.tabs || []).map(tab => tab.name);
       const newTabName = handleDuplicateName(originalTabName, existingTabNames);
       
       console.log(`📝 Creating new tab "${newTabName}" in target page ${targetPageId}`);
@@ -1130,11 +1130,11 @@ export default function HomePage() {
                       console.log(`Processing same project for both source and target: ${sourceProjectId}`);
           return {
             ...project,
-            pages: project.pages.map(page => {
+            pages: (project.pages || []).map(page => {
               if (page.id === sourcePageId && page.id === targetPageId) {
                 // Same page - remove the tab and add it back with new ID
                 console.log(`Processing same page for both source and target: ${sourcePageId}`);
-                const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+                const filteredTabs = (page.tabs || []).filter(tab => tab.id !== tabId);
                 const newTabs = [...filteredTabs, newTab];
                                   console.log(`Same page: removed tab ${tabId}, added tab ${newTab.id}, total tabs:`, newTabs.length);
                 return {
@@ -1143,7 +1143,7 @@ export default function HomePage() {
                 };
               } else if (page.id === sourcePageId) {
                 // Source page only - remove the tab
-                const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+                const filteredTabs = (page.tabs || []).filter(tab => tab.id !== tabId);
                 console.log(`Removed tab ${tabId} from source page ${sourcePageId}, remaining tabs:`, filteredTabs.length);
                 return {
                   ...page,
@@ -1151,8 +1151,8 @@ export default function HomePage() {
                 };
               } else if (page.id === targetPageId) {
                 // Target page only - add the new tab
-                console.log(`Target page ${targetPageId} before update:`, page.tabs.length, 'tabs');
-                const newTabs = [...page.tabs, newTab];
+                console.log(`Target page ${targetPageId} before update:`, (page.tabs || []).length, 'tabs');
+                const newTabs = [...(page.tabs || []), newTab];
                 console.log(`Added tab ${newTab.id} to target page ${targetPageId}, total tabs:`, newTabs.length);
                 console.log(`New tabs array:`, newTabs.map(t => ({ id: t.id, name: t.name })));
                 return {
@@ -1167,9 +1167,9 @@ export default function HomePage() {
           console.log(`Processing source project ${sourceProjectId}`);
           return {
             ...project,
-            pages: project.pages.map(page => {
+            pages: (project.pages || []).map(page => {
                           if (page.id === sourcePageId) {
-              const filteredTabs = page.tabs.filter(tab => tab.id !== tabId);
+              const filteredTabs = (page.tabs || []).filter(tab => tab.id !== tabId);
               console.log(`Removed tab ${tabId} from source page ${sourcePageId}, remaining tabs:`, filteredTabs.length);
               return {
                 ...page,
@@ -1183,11 +1183,11 @@ export default function HomePage() {
           console.log(`Processing target project ${targetProjectId}`);
           return {
             ...project,
-            pages: project.pages.map(page => {
+            pages: (project.pages || []).map(page => {
               console.log(`Processing page ${page.id} in target project`);
               if (page.id === targetPageId) {
-                console.log(`Target page ${targetPageId} before update:`, page.tabs.length, 'tabs');
-                const newTabs = [...page.tabs, newTab];
+                console.log(`Target page ${targetPageId} before update:`, (page.tabs || []).length, 'tabs');
+                const newTabs = [...(page.tabs || []), newTab];
                 console.log(`Added tab ${newTab.id} to target page ${targetPageId}, total tabs:`, newTabs.length);
                 console.log(`New tabs array:`, newTabs.map(t => ({ id: t.id, name: t.name })));
                 return {
@@ -1369,14 +1369,14 @@ export default function HomePage() {
       const targetProject = updatedProjects.find(p => p.id === targetProjectId);
       
       if (sourceProject && targetProject) {
-        const sourcePageIndex = sourceProject.pages.findIndex(p => p.id === draggedPage.pageId);
+        const sourcePageIndex = sourceProject.pages?.findIndex(p => p.id === draggedPage.pageId);
         
         if (sourcePageIndex !== -1) {
           // Remove page from source project
           const [draggedPageItem] = sourceProject.pages.splice(sourcePageIndex, 1);
           
           // Check for duplicate names in target project
-          const existingPageNames = targetProject.pages.map(p => p.name);
+          const existingPageNames = (targetProject.pages || []).map(p => p.name);
           const originalPageName = draggedPageItem.name;
           
           // Handle potential name conflicts (both within same project and across projects)
@@ -1421,12 +1421,12 @@ export default function HomePage() {
           // Save new page order to database
           try {
             // Update order for target project
-            const targetPageIds = targetProject.pages.map(p => p.id);
+            const targetPageIds = (targetProject.pages || []).map(p => p.id);
             await workspaceStateService.updatePageOrder(targetProjectId, targetPageIds);
             
             // If page moved between projects, also update source project order
             if (draggedPage.projectId !== targetProjectId) {
-              const sourcePageIds = sourceProject.pages.map(p => p.id);
+              const sourcePageIds = (sourceProject.pages || []).map(p => p.id);
               await workspaceStateService.updatePageOrder(draggedPage.projectId, sourcePageIds);
             }
           } catch (error) {
@@ -1549,7 +1549,7 @@ export default function HomePage() {
     const targetPage = projects.find(p => p.id === targetProjectId)?.pages?.find(pg => pg.id === targetPageId);
     if (!targetPage) return;
     
-    const existingTabNames = targetPage.tabs.map(t => t.name);
+    const existingTabNames = (targetPage.tabs || []).map(t => t.name);
     let newTabName = tab.name;
     
     // For copy operations, add "Copy" suffix to make it clear it's a copy
@@ -1749,7 +1749,7 @@ export default function HomePage() {
       return;
     }
     
-    const existingTabNames = targetPage.tabs.map(t => t.name);
+    const existingTabNames = (targetPage.tabs || []).map(t => t.name);
               let newTabName = tab.name;
               
               // For copy operations, add "Copy" suffix to make it clear it's a copy
@@ -1789,7 +1789,7 @@ export default function HomePage() {
         // Step 3: Create new tab in target location
         console.log('Creating new tab with name:', newTabName, 'type:', tab.tabType || tab.type);
         // Calculate position after the target tab
-        const targetTabIndex = targetPage.tabs.findIndex(t => t.id === targetTabId);
+        const targetTabIndex = targetPage.tabs?.findIndex(t => t.id === targetTabId) || -1;
         const position = targetTabIndex + 1;
         const movedTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         console.log('New tab created in target location:', movedTab.id);
@@ -1859,7 +1859,7 @@ export default function HomePage() {
       // For copy operation: Create new tab (existing logic)
       try {
         // Calculate position after the target tab
-        const targetTabIndex = targetPage.tabs.findIndex(t => t.id === targetTabId);
+        const targetTabIndex = targetPage.tabs?.findIndex(t => t.id === targetTabId) || -1;
         const position = targetTabIndex + 1;
         const createdTab = await workspaceApiService.createTab(targetPageId, newTabName, tab.tabType || tab.type, position);
         
@@ -2636,7 +2636,7 @@ export default function HomePage() {
             console.log('Project copied to backend:', newProjectId);
             
             // Copy all pages from original project
-            for (const originalPage of project.pages) {
+            for (const originalPage of (project.pages || [])) {
               const pageNames = getExistingNames('page', newProjectId);
               const newPageName = generateUniqueName(originalPage.name, pageNames);
               const newPage = await workspaceStateService.createPage(newProjectId, newPageName);
@@ -2710,7 +2710,7 @@ export default function HomePage() {
     } else if (type === 'page') {
       const { projectId, pageId } = itemId;
       const project = projects.find(p => p.id === projectId);
-      const page = project.pages.find(p => p.id === pageId);
+      const page = project.pages?.find(p => p.id === pageId);
       
       switch (action) {
         case 'rename':
@@ -2808,8 +2808,8 @@ export default function HomePage() {
       const tabId = itemId;
       const { projectId, pageId } = selectedPage;
       const project = projects.find(p => p.id === projectId);
-      const page = project.pages.find(p => p.id === pageId);
-      const tab = page.tabs.find(t => t.id === tabId);
+      const page = project.pages?.find(p => p.id === pageId);
+      const tab = page?.tabs?.find(t => t.id === tabId);
       
       switch (action) {
         case 'rename':
@@ -2907,8 +2907,8 @@ export default function HomePage() {
           setProjects(updatedProjectsRight);
             
             // Update display order in backend
-            const updatedPage = updatedProjectsRight.find(p => p.id === projectId).pages.find(p => p.id === pageId);
-            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            const updatedPage = updatedProjectsRight.find(p => p.id === projectId)?.pages?.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, (updatedPage?.tabs || []).map(t => t.id));
             
             console.log('New tab created to the right:', newTabNameRight);
           } catch (error) {
@@ -3020,8 +3020,8 @@ export default function HomePage() {
           setProjects(updatedProjectsStart);
             
             // Update display order in backend
-            const updatedPage = updatedProjectsStart.find(p => p.id === projectId).pages.find(p => p.id === pageId);
-            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            const updatedPage = updatedProjectsStart.find(p => p.id === projectId)?.pages?.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, (updatedPage?.tabs || []).map(t => t.id));
             console.log('Tab moved to start successfully');
           } catch (error) {
             console.error('❌ Failed to move tab to start:', error);
@@ -3057,8 +3057,8 @@ export default function HomePage() {
           setProjects(updatedProjectsEnd);
             
             // Update display order in backend
-            const updatedPage = updatedProjectsEnd.find(p => p.id === projectId).pages.find(p => p.id === pageId);
-            await workspaceStateService.updateTabOrder(pageId, updatedPage.tabs.map(t => t.id));
+            const updatedPage = updatedProjectsEnd.find(p => p.id === projectId)?.pages?.find(p => p.id === pageId);
+            await workspaceStateService.updateTabOrder(pageId, (updatedPage?.tabs || []).map(t => t.id));
             console.log('Tab moved to end successfully');
           } catch (error) {
             console.error('❌ Failed to move tab to end:', error);
@@ -3068,8 +3068,8 @@ export default function HomePage() {
         case 'closeOthers':
           // Close all other tabs except the current one and locked tabs
           try {
-            const currentPage = project.pages.find(p => p.id === pageId);
-            const tabsToDelete = currentPage.tabs.filter(t => t.id !== tabId && !t.locked && !t.isLocked);
+            const currentPage = project.pages?.find(p => p.id === pageId);
+            const tabsToDelete = currentPage?.tabs?.filter(t => t.id !== tabId && !t.locked && !t.isLocked) || [];
             
             // Delete tabs from backend
             for (const tabToDelete of tabsToDelete) {
@@ -3137,8 +3137,8 @@ export default function HomePage() {
         case 'closeAll':
           // Close all tabs except locked ones, create welcome tab if none left
           try {
-            const currentPage = project.pages.find(p => p.id === pageId);
-            const tabsToDelete = currentPage.tabs.filter(t => !t.locked && !t.isLocked);
+            const currentPage = project.pages?.find(p => p.id === pageId);
+            const tabsToDelete = currentPage?.tabs?.filter(t => !t.locked && !t.isLocked) || [];
             
             // Delete tabs from backend
             for (const tabToDelete of tabsToDelete) {
@@ -3255,8 +3255,8 @@ export default function HomePage() {
         case 'closeTabsToRight':
           // Close all tabs to the right of the current tab (except locked tabs)
           try {
-            const currentPage = project.pages.find(p => p.id === pageId);
-            const currentTabIndex = currentPage.tabs.findIndex(t => t.id === tabId);
+            const currentPage = project.pages?.find(p => p.id === pageId);
+            const currentTabIndex = currentPage?.tabs?.findIndex(t => t.id === tabId) || -1;
             
             if (currentTabIndex === -1) {
               console.error('❌ Current tab not found');
@@ -3264,7 +3264,7 @@ export default function HomePage() {
             }
             
             // Get all tabs to the right of the current tab (excluding locked tabs)
-            const tabsToDelete = currentPage.tabs
+            const tabsToDelete = (currentPage.tabs || [])
               .slice(currentTabIndex + 1)
               .filter(t => !t.locked && !t.isLocked);
             
@@ -3445,11 +3445,11 @@ export default function HomePage() {
           // Preserve project expansion state
           isExpanded: currentProjectExpanded,
           expanded: currentProjectExpanded,
-          pages: project.pages.map(page => {
+          pages: (project.pages || []).map(page => {
             if (page.id === pageId) {
               return {
                 ...page,
-                tabs: page.tabs.map(tab => ({
+                tabs: (page.tabs || []).map(tab => ({
                   ...tab,
                   active: tab.id === tabId,
                   isActive: tab.id === tabId  // Support both property names
@@ -3724,9 +3724,9 @@ export default function HomePage() {
         if (project.id === selectedPage.projectId) {
           return {
             ...project,
-            pages: project.pages.map(page => {
+            pages: (project.pages || []).map(page => {
               if (page.id === selectedPage.pageId) {
-                const currentTabs = [...page.tabs];
+                const currentTabs = [...(page.tabs || [])];
                 const draggedTabIndex = currentTabs.findIndex(tab => tab.id === dropdownDraggedTab);
                 const targetTabIndex = currentTabs.findIndex(tab => tab.id === targetTabId);
                 
@@ -6919,9 +6919,9 @@ export default function HomePage() {
                                 // Immediately update the tab's mergedData to reflect the cleared state
                                 setProjects(prevProjects => prevProjects.map(project => ({
                                   ...project,
-                                  pages: project.pages.map(page => ({
+                                  pages: (project.pages || []).map(page => ({
                                     ...page,
-                                    tabs: page.tabs.map(tab => {
+                                    tabs: (page.tabs || []).map(tab => {
                                       if (tab.id === activeTabForDisplay.id) {
                                         return {
                                           ...tab,

@@ -18,13 +18,13 @@ Construction Web is a comprehensive web application designed for construction en
 
 ### Light Mode Interface
 
-**Wind Load Calculator - Engineering Analysis Dashboard**
-![Wind Load Calculator](screenshots/wind-load-calculator-light.png)
-Professional wind load calculation interface with real-time parameter adjustment and comprehensive calculation results display.
-
 **Snow Load Calculator - Structural Engineering Tool**
 ![Snow Load Calculator](screenshots/snow-load-calculator-light.png)
 Advanced snow load analysis with location-based calculations, and detailed parameter management for structural design.
+
+**Wind Load Calculator - Engineering Analysis Dashboard**
+![Wind Load Calculator](screenshots/wind-load-calculator-light.png)
+Professional wind load calculation interface with real-time parameter adjustment and calculation results display.
 
 **Seismic Hazards Analysis - Geotechnical Assessment**
 ![Seismic Hazards Analysis](screenshots/seismic-hazards-light.png)
