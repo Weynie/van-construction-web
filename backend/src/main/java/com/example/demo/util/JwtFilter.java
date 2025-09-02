@@ -29,7 +29,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
-        // ✅ Skip JWT check for login, register, and API key endpoints
+        // Skip JWT check for login, register, and API key endpoints
         if (path.startsWith("/api/users/login") || 
             path.startsWith("/api/users/register") ||
             path.startsWith("/api/user/") && path.contains("/api-key")) {

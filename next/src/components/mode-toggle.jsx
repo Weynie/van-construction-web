@@ -27,9 +27,9 @@ export function ModeToggle({ userId }) {
     if (userId) {
       try {
         await themePreferenceService.updateThemePreference(userId, theme);
-        console.log('✅ Theme preference saved to database:', theme);
+        console.log('Theme preference saved to database:', theme);
       } catch (error) {
-        console.error('❌ Failed to save theme preference to database:', error);
+        console.error('Failed to save theme preference to database:', error);
         // Theme is still saved to localStorage, so user experience is not affected
       }
     }

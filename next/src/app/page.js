@@ -30,7 +30,7 @@ import {
   Key, UserPlus, LogIn, Lock, Unlock,
   X, Plus, Info, CheckCircle, AlertTriangle, Edit, Copy, Trash2, Scissors, RefreshCw,
   Settings, Bell, Palette, Database, Shield, User,
-  Folder, FileText, Globe, GripVertical
+  Folder, FileText, Globe, GripVertical, Circle
 } from 'lucide-react';
 
 // Add CSS for hiding scrollbars
@@ -194,7 +194,7 @@ export default function HomePage() {
           
           // Restore password from sessionStorage if available
           const storedPassword = sessionStorage.getItem('userPassword');
-          console.log('🔑 Stored password found:', !!storedPassword);
+          console.log('Stored password found:', !!storedPassword);
           if (storedPassword) {
             setUserPassword(storedPassword);
           }
@@ -221,7 +221,7 @@ export default function HomePage() {
               // Also save to localStorage for immediate access
               themePreferenceService.saveThemeToLocalStorage(themePreference);
             } catch (themeError) {
-              console.warn('⚠️ Failed to load theme preference, using localStorage fallback:', themeError);
+              console.warn('Failed to load theme preference, using localStorage fallback:', themeError);
               // Use localStorage fallback
               const fallbackTheme = themePreferenceService.getThemeFromLocalStorage();
               console.log('Using fallback theme:', fallbackTheme);
@@ -232,10 +232,10 @@ export default function HomePage() {
             
             // Initialize workspace after successful authentication
             // Pass the stored password directly to ensure it's available immediately
-            console.log('🚀 Starting workspace initialization...');
+            console.log('Starting workspace initialization...');
             await initializeWorkspace(storedPassword);
           } catch (error) {
-            console.error('❌ Failed to fetch user profile:', error);
+            console.error('Failed to fetch user profile:', error);
             // If profile fetch fails, user might not be authenticated anymore
             // Clear authentication state
             setIsAuthenticated(false);
@@ -385,7 +385,7 @@ export default function HomePage() {
             }
           }
         } catch (activeStateError) {
-          console.warn('⚠️ Failed to restore active state, using defaults:', activeStateError);
+          console.warn('Failed to restore active state, using defaults:', activeStateError);
           // Fallback to first project and page
           const firstProject = workspaceData.projects[0];
           if (firstProject && firstProject.pages && firstProject.pages.length > 0) {
@@ -396,7 +396,7 @@ export default function HomePage() {
           }
         }
       } else {
-        console.log('📝 No existing projects, initializing default workspace...');
+        console.log('No existing projects, initializing default workspace...');
         // Initialize workspace with default structure
         await workspaceStateService.initializeWorkspace();
         // Reload data after initialization
@@ -421,9 +421,9 @@ export default function HomePage() {
       React.startTransition(() => {
         setWorkspaceLoaded(true);
       });
-      console.log('🎉 Workspace initialization completed!');
+      console.log('Workspace initialization completed!');
     } catch (error) {
-      console.error('❌ Error initializing workspace:', error);
+              console.error('Error initializing workspace:', error);
       setWorkspaceError(error.message);
       setWorkspaceLoading(false);
       showToastNotification('Failed to load workspace: ' + error.message, 'error');
@@ -573,9 +573,9 @@ export default function HomePage() {
               ...page,
               tabs: (page.tabs || []).map(tab => {
                 if (tab.id === change.tabId) {
-                  console.log('📝 Before update:', { name: tab.name, mergedData: !!tab.mergedData });
+                  console.log('Before update:', { name: tab.name, mergedData: !!tab.mergedData });
                   const updatedTab = { ...tab, ...change.updates };
-                  console.log('📝 After update:', { name: updatedTab.name, mergedData: !!updatedTab.mergedData });
+                                      console.log('After update:', { name: updatedTab.name, mergedData: !!updatedTab.mergedData });
                   return updatedTab;
                 }
                 return tab;
@@ -667,7 +667,7 @@ export default function HomePage() {
           
         case 'TAB_DELETE_FAILED':
           // Tab deletion failed - reload the workspace to restore the tab
-          console.error('❌ Tab deletion failed:', change.tabId, change.error);
+          console.error('Tab deletion failed:', change.tabId, change.error);
           showToastNotification('Failed to delete tab: ' + change.error, 'error');
           // Reload workspace to restore the failed deletion
           initializeWorkspace(currentUserPassword);
@@ -680,7 +680,7 @@ export default function HomePage() {
           
         case 'TAB_DATA_SAVE_FAILED':
           // Tab data save failed - could implement rollback here if needed
-          console.error('❌ Tab data save failed:', change.tabId, change.error);
+          console.error('Tab data save failed:', change.tabId, change.error);
           break;
           
         case 'NOTIFICATION':
@@ -1045,7 +1045,7 @@ export default function HomePage() {
         }
         console.log('Retrieved tab data for move:', tabData);
       } catch (dataError) {
-        console.warn('⚠️ Could not retrieve tab data, will use template defaults:', dataError);
+        console.warn('Could not retrieve tab data, will use template defaults:', dataError);
         // Continue with move even if data retrieval fails
       }
       
@@ -1058,7 +1058,7 @@ export default function HomePage() {
       const existingTabNames = (targetPage.tabs || []).map(tab => tab.name);
       const newTabName = handleDuplicateName(originalTabName, existingTabNames);
       
-      console.log(`📝 Creating new tab "${newTabName}" in target page ${targetPageId}`);
+              console.log(`Creating new tab "${newTabName}" in target page ${targetPageId}`);
       if (newTabName !== originalTabName) {
         console.log(`Tab name changed from "${originalTabName}" to "${newTabName}" to avoid duplicate`);
       }
@@ -1086,7 +1086,7 @@ export default function HomePage() {
           }
                       console.log('Tab data copied successfully');
         } catch (dataCopyError) {
-          console.warn('⚠️ Failed to copy tab data, continuing with move:', dataCopyError);
+          console.warn('Failed to copy tab data, continuing with move:', dataCopyError);
         }
       }
       
@@ -1535,7 +1535,7 @@ export default function HomePage() {
       targetPageId 
     });
     if (!clipboard.data || clipboard.type === null) {
-      console.log('❌ No clipboard data available');
+              console.log('No clipboard data available');
       return;
     }
     
@@ -1698,7 +1698,7 @@ export default function HomePage() {
         console.log('Tab copied successfully:', newTabName);
         showToastNotification(`Tab "${newTabName}" copied successfully`, 'success');
       } catch (error) {
-        console.error('❌ Failed to copy tab:', error);
+        console.error('Failed to copy tab:', error);
         showToastNotification('Failed to copy tab: ' + error.message, 'error');
       }
     }
@@ -1926,7 +1926,7 @@ export default function HomePage() {
     }
     } // Close the else block for copy operation
     
-    console.log('🎯 Paste operation completed, cleaning up...');
+    console.log('Paste operation completed, cleaning up...');
     
     // Clear clipboard after paste
     if (clipboard.type === 'cut') {
@@ -2102,7 +2102,7 @@ export default function HomePage() {
             page.tabs.forEach((tab, tabIndex) => {
               console.log(`Tab ${projectIndex}-${pageIndex}-${tabIndex}:`, tab.type || tab.tabType, 'merged:', !!tab.mergedData);
               if ((tab.type === 'seismic' || tab.tabType === 'seismic') && tab.mergedData?.seismicResults?.rgb) {
-                console.log('🎯 Found seismic tab with results!', tab.mergedData.seismicResults);
+                console.log('Found seismic tab with results!', tab.mergedData.seismicResults);
                 const seismicResult = tab.mergedData.seismicResults;
                 if (sedimentTypes.length > 0) {
                   // Check if probabilities are already calculated
@@ -2215,12 +2215,12 @@ export default function HomePage() {
                   }
                 }
               } catch (error) {
-                console.error('❌ Failed to restore active state:', error);
+                console.error('Failed to restore active state:', error);
               }
             }
             console.log('Workspace initialized after login with encryption');
           } catch (error) {
-            console.error('❌ Failed to initialize workspace after login:', error);
+            console.error('Failed to initialize workspace after login:', error);
             showToastNotification('Failed to load workspace: ' + error.message, 'error');
           }
           
@@ -2410,7 +2410,7 @@ export default function HomePage() {
             });
             if (!res.ok) throw new Error('Failed to fetch seismic info');
             const seismicResult = await res.json();
-            console.log('🎯 Seismic API response received (decrypt path):', seismicResult);
+            console.log('Seismic API response received (decrypt path):', seismicResult);
             setSeismicResults(prev => ({
               ...prev,
               [tabKey]: seismicResult
@@ -2438,7 +2438,7 @@ export default function HomePage() {
               await workspaceStateService.saveTabDataEncryptedImmediately(tabId, 'seismic', seismicResultsDelta, userPassword);
                               console.log('Seismic results saved successfully (decrypt path)');
             } catch (error) {
-              console.error('❌ Error saving seismic results (decrypt path):', error);
+              console.error('Error saving seismic results (decrypt path):', error);
               // Don't show error to user as this is background save - the UI is already working
             }
             
@@ -2597,7 +2597,7 @@ export default function HomePage() {
         await selectPage(projectId, firstPage.id);
       }
     } catch (error) {
-      console.error('❌ Failed to save active project:', error);
+      console.error('Failed to save active project:', error);
       // Don't show error to user as this is background save
     }
   };
@@ -2669,7 +2669,7 @@ export default function HomePage() {
                       await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
                       console.log('Tab data copied:', newTabName);
                     } catch (error) {
-                      console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
+                      console.warn('Failed to copy tab data for:', newTabName, error);
                     }
                   }
                 }
@@ -2678,7 +2678,7 @@ export default function HomePage() {
             
             showToastNotification(`Project "${newProjectName}" copied successfully`, 'success');
           } catch (error) {
-            console.error('❌ Failed to copy project:', error);
+            console.error('Failed to copy project:', error);
             showToastNotification('Failed to copy project: ' + error.message, 'error');
           }
           break;
@@ -2692,7 +2692,7 @@ export default function HomePage() {
             console.log('Project deleted from backend:', projectId);
             showToastNotification(`Project "${project.name}" deleted successfully`, 'success');
           } catch (error) {
-            console.error('❌ Failed to delete project:', error);
+            console.error('Failed to delete project:', error);
             // Restore the project in frontend if backend delete failed
             setProjects(prevProjects => {
               if (!prevProjects.find(p => p.id === projectId)) {
@@ -2752,7 +2752,7 @@ export default function HomePage() {
                     await workspaceStateService.updateTabData(createdTab.id, originalTab.type || originalTab.tabType, tabData.mergedData || {});
                                           console.log('Tab data copied:', newTabName);
                   } catch (error) {
-                    console.warn('⚠️ Failed to copy tab data for:', newTabName, error);
+                    console.warn('Failed to copy tab data for:', newTabName, error);
                   }
                 }
               }
@@ -2760,7 +2760,7 @@ export default function HomePage() {
             
             showToastNotification(`Page "${newPageName}" copied successfully`, 'success');
           } catch (error) {
-            console.error('❌ Failed to copy page:', error);
+            console.error('Failed to copy page:', error);
             showToastNotification('Failed to copy page: ' + error.message, 'error');
           }
           break;
@@ -2783,7 +2783,7 @@ export default function HomePage() {
             console.log('Page deleted from backend:', pageId);
             showToastNotification(`Page "${page.name}" deleted successfully`, 'success');
           } catch (error) {
-            console.error('❌ Failed to delete page:', error);
+            console.error('Failed to delete page:', error);
             // Restore the page in frontend if backend delete failed
             setProjects(prevProjects => prevProjects.map(p => {
               if (p.id === projectId) {
@@ -2859,7 +2859,7 @@ export default function HomePage() {
           setProjects(updatedProjects);
             console.log('Tab copied successfully:', newTabName);
           } catch (error) {
-            console.error('❌ Failed to copy tab:', error);
+            console.error('Failed to copy tab:', error);
             showToastNotification('Failed to copy tab: ' + error.message, 'error');
           }
           break;
@@ -2912,7 +2912,7 @@ export default function HomePage() {
             
             console.log('New tab created to the right:', newTabNameRight);
           } catch (error) {
-            console.error('❌ Failed to create new tab to the right:', error);
+            console.error('Failed to create new tab to the right:', error);
             showToastNotification('Failed to create new tab: ' + error.message, 'error');
           }
           break;
@@ -2945,7 +2945,7 @@ export default function HomePage() {
           setProjects(updatedProjectsLock);
             console.log('Tab locked successfully');
           } catch (error) {
-            console.error('❌ Failed to lock tab:', error);
+            console.error('Failed to lock tab:', error);
             showToastNotification('Failed to lock tab: ' + error.message, 'error');
           }
           break;
@@ -2978,7 +2978,7 @@ export default function HomePage() {
           setProjects(updatedProjectsUnlock);
             console.log('Tab unlocked successfully');
           } catch (error) {
-            console.error('❌ Failed to unlock tab:', error);
+            console.error('Failed to unlock tab:', error);
             showToastNotification('Failed to unlock tab: ' + error.message, 'error');
           }
           break;
@@ -3024,7 +3024,7 @@ export default function HomePage() {
             await workspaceStateService.updateTabOrder(pageId, (updatedPage?.tabs || []).map(t => t.id));
             console.log('Tab moved to start successfully');
           } catch (error) {
-            console.error('❌ Failed to move tab to start:', error);
+            console.error('Failed to move tab to start:', error);
             showToastNotification('Failed to move tab: ' + error.message, 'error');
           }
           break;
@@ -3061,7 +3061,7 @@ export default function HomePage() {
             await workspaceStateService.updateTabOrder(pageId, (updatedPage?.tabs || []).map(t => t.id));
             console.log('Tab moved to end successfully');
           } catch (error) {
-            console.error('❌ Failed to move tab to end:', error);
+            console.error('Failed to move tab to end:', error);
             showToastNotification('Failed to move tab: ' + error.message, 'error');
           }
           break;
@@ -3107,7 +3107,7 @@ export default function HomePage() {
                               return pr;
                             }));
                           } catch (error) {
-                            console.error('❌ Failed to create welcome tab:', error);
+                            console.error('Failed to create welcome tab:', error);
                           }
                         };
                         createWelcomeTab();
@@ -3128,9 +3128,9 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsCloseOthers);
-            console.log('✅ Closed other tabs successfully');
+            console.log('Closed other tabs successfully');
           } catch (error) {
-            console.error('❌ Failed to close other tabs:', error);
+            console.error('Failed to close other tabs:', error);
             showToastNotification('Failed to close other tabs: ' + error.message, 'error');
           }
           break;
@@ -3176,7 +3176,7 @@ export default function HomePage() {
                               return pr;
                             }));
                           } catch (error) {
-                            console.error('❌ Failed to create welcome tab:', error);
+                            console.error('Failed to create welcome tab:', error);
                           }
                         };
                         createWelcomeTab();
@@ -3197,9 +3197,9 @@ export default function HomePage() {
             return p;
           });
           setProjects(updatedProjectsCloseAll);
-            console.log('✅ Closed all tabs successfully');
+            console.log('Closed all tabs successfully');
           } catch (error) {
-            console.error('❌ Failed to close all tabs:', error);
+            console.error('Failed to close all tabs:', error);
             showToastNotification('Failed to close all tabs: ' + error.message, 'error');
           }
           break;
@@ -3245,10 +3245,10 @@ export default function HomePage() {
               return p;
             }));
             
-            console.log('✅ Tab reset to template successfully');
+            console.log('Tab reset to template successfully');
             showToastNotification('Tab reset to template successfully', 'success');
           } catch (error) {
-            console.error('❌ Failed to reset tab to template:', error);
+            console.error('Failed to reset tab to template:', error);
             showToastNotification('Failed to reset tab: ' + error.message, 'error');
           }
           break;
@@ -3259,7 +3259,7 @@ export default function HomePage() {
             const currentTabIndex = currentPage?.tabs?.findIndex(t => t.id === tabId) || -1;
             
             if (currentTabIndex === -1) {
-              console.error('❌ Current tab not found');
+              console.error('Current tab not found');
               return;
             }
             
@@ -3269,7 +3269,7 @@ export default function HomePage() {
               .filter(t => !t.locked && !t.isLocked);
             
             if (tabsToDelete.length === 0) {
-              console.log('📝 No tabs to close to the right');
+              console.log('No tabs to close to the right');
               return;
             }
             
@@ -3306,10 +3306,10 @@ export default function HomePage() {
             });
             
             setProjects(updatedProjectsCloseToRight);
-            console.log(`✅ Closed ${tabsToDelete.length} tabs to the right successfully`);
+            console.log(`Closed ${tabsToDelete.length} tabs to the right successfully`);
             showToastNotification(`Closed ${tabsToDelete.length} tabs to the right`, 'success');
           } catch (error) {
-            console.error('❌ Failed to close tabs to the right:', error);
+            console.error('Failed to close tabs to the right:', error);
             showToastNotification('Failed to close tabs to the right: ' + error.message, 'error');
           }
           break;
@@ -3317,9 +3317,9 @@ export default function HomePage() {
           // Close the current tab
           try {
             await closeTab(tabId);
-            console.log('✅ Tab closed successfully');
+            console.log('Tab closed successfully');
           } catch (error) {
-            console.error('❌ Failed to close tab:', error);
+            console.error('Failed to close tab:', error);
             showToastNotification('Failed to close tab: ' + error.message, 'error');
           }
           break;
@@ -3375,11 +3375,11 @@ export default function HomePage() {
   };
 
   const closeTab = async (tabId) => {
-    console.log('🔄 closeTab called for:', tabId);
+    console.log('closeTab called for:', tabId);
     
     // Check if this tab is already being deleted
     if (deletingTabs.has(tabId)) {
-      console.warn('⚠️ Tab deletion already in progress:', tabId);
+              console.warn('Tab deletion already in progress:', tabId);
       return;
     }
     
@@ -3392,28 +3392,28 @@ export default function HomePage() {
     
     // Check if tab exists and is not already being deleted
     if (!tabToClose) {
-      console.warn('⚠️ Tab not found or already deleted:', tabId);
+              console.warn('Tab not found or already deleted:', tabId);
       return;
     }
     
     if (tabToClose.locked) {
-      console.warn('🔒 Cannot delete locked tab:', tabId);
+      console.warn('Cannot delete locked tab:', tabId);
       return; // Don't close locked tabs
     }
     
     // Mark this tab as being deleted
     setDeletingTabs(prev => new Set(prev).add(tabId));
-    console.log('🗑️ Starting tab deletion process for:', tabId);
+    console.log('Starting tab deletion process for:', tabId);
     
     // Delete using workspace state service (which handles optimistic updates and state preservation)
     try {
       await workspaceStateService.deleteTab(tabId);
-      console.log('✅ Tab deletion completed successfully for:', tabId);
+              console.log('Tab deletion completed successfully for:', tabId);
       
       // Note: Tab selection after deletion is handled by the UI automatically
       // when the optimistic update removes the tab from the list
     } catch (error) {
-      console.error('❌ Failed to delete tab:', tabId, error);
+              console.error('Failed to delete tab:', tabId, error);
       // Only show error notification if it's not a "Tab not found" error (which might be expected due to optimistic updates)
       if (!error.message.includes('Tab not found')) {
         showToastNotification('Failed to delete tab: ' + error.message, 'error');
@@ -3425,7 +3425,7 @@ export default function HomePage() {
         newSet.delete(tabId);
         return newSet;
       });
-      console.log('🧹 Removed tab from deleting set:', tabId);
+      console.log('Removed tab from deleting set:', tabId);
     }
   };
 
@@ -3470,13 +3470,13 @@ export default function HomePage() {
     if (isValidUUID) {
       try {
         await workspaceApiService.updateActiveTab(tabId);
-        console.log('✅ Tab selected and active status saved:', tabId);
+        console.log('Tab selected and active status saved:', tabId);
       } catch (error) {
-        console.error('❌ Failed to save active tab status:', error);
+        console.error('Failed to save active tab status:', error);
         // Don't show error to user as this is background save
       }
     } else {
-      console.log('📝 Skipping backend save for temporary Welcome tab:', tabId);
+              console.log('Skipping backend save for temporary Welcome tab:', tabId);
     }
   };
 
@@ -3487,7 +3487,7 @@ export default function HomePage() {
     try {
       await workspaceStateService.updateActiveProject(projectId);
     } catch (error) {
-      console.error('❌ Failed to save active project:', error);
+      console.error('Failed to save active project:', error);
       // Don't show error to user as this is background save
     }
     
@@ -3495,7 +3495,7 @@ export default function HomePage() {
     try {
       await workspaceStateService.updateActivePage(pageId);
     } catch (error) {
-      console.error('❌ Failed to save active page:', error);
+              console.error('Failed to save active page:', error);
       // Don't show error to user as this is background save
     }
     
@@ -3511,11 +3511,11 @@ export default function HomePage() {
         if (!activeTab) {
           // No active tab found, switch to the first tab
           const firstTab = page.tabs[0];
-          console.log('🔄 Auto-switching to first tab when switching to page:', firstTab.name);
+          console.log('Auto-switching to first tab when switching to page:', firstTab.name);
           selectTab(firstTab.id);
         } else {
           // Active tab exists, don't override it
-          console.log('✅ Page has active tab, preserving selection:', activeTab.name);
+          console.log('Page has active tab, preserving selection:', activeTab.name);
         }
       }
     }, 100); // Small delay to ensure state is updated
@@ -3615,7 +3615,7 @@ export default function HomePage() {
       // Check if this is a valid UUID (not a temporary Welcome tab)
       const isValidUUID = typeof tabId === 'string' && tabId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
       if (!isValidUUID) {
-        console.log('📝 Cannot change type of temporary Welcome tab with timestamp ID:', tabId);
+        console.log('Cannot change type of temporary Welcome tab with timestamp ID:', tabId);
         showToastNotification('Please create a real tab first before changing its type', 'error');
         return;
       }
@@ -4065,7 +4065,7 @@ export default function HomePage() {
                         size="sm"
                         className="h-12 px-4 flex items-center gap-1"
                       >
-                        <X size={12} className="text-gray-500" />
+                        <X size={12} className="text-muted-foreground" />
                         <span>Cancel</span>
                       </Button>
                     </div>
@@ -4093,46 +4093,28 @@ export default function HomePage() {
           </div>
         </div>
                 {showErrorDialog && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              padding: '24px',
-              maxWidth: '400px',
-              margin: '0 16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-            }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-lg font-semibold ${errorMessage.includes('successful') ? 'text-green-600' : 'text-foreground'}`}>
-                  {errorMessage.includes('successful') ? 'Success' : 'Message'}
-                </h3>
-                <Button
-                  onClick={() => setShowErrorDialog(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X size={20} />
-                </Button>
+          <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+            <DialogContent className="max-w-sm flex flex-col gap-4">
+              <DialogHeader>
+                <DialogTitle className={`flex items-center ${errorMessage.includes('successful') ? 'text-green-600' : 'text-foreground'}`}>
+                  {errorMessage.includes('successful') ? (
+                    <>
+                      <CheckCircle size={20} className="text-green-500 mr-2" />
+                      Success
+                    </>
+                  ) : (
+                    'Message'
+                  )}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="flex items-start">
+                <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-foreground'}`}>
+                  {errorMessage}
+                </p>
               </div>
-              <div className="flex items-center mb-4">
-                {errorMessage.includes('successful') && (
-                  <CheckCircle size={20} className="text-green-500 mr-3 flex-shrink-0" />
-                )}
-                <p className={`${errorMessage.includes('successful') ? 'text-green-700' : 'text-foreground'}`}>{errorMessage}</p>
-              </div>
-              <div className="flex justify-end">
+              
+              <DialogFooter>
                 <Button
                   onClick={() => setShowErrorDialog(false)}
                   variant={errorMessage.includes('successful') ? 'default' : 'default'}
@@ -4140,9 +4122,9 @@ export default function HomePage() {
                 >
                   OK
                 </Button>
-              </div>
-            </div>
-          </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </>
     );
@@ -4232,10 +4214,32 @@ export default function HomePage() {
                   : 'API Key not stored - click to manage'
               }
             >
-              <Key size={14} className="flex-shrink-0" />
-              <span className="text-xs font-medium">
-                {apiKeyLoading ? 'Checking...' : (hasStoredApiKey ? 'API Key ✓' : 'API Key ○')}
-              </span>
+              <div className="flex items-center gap-2">
+                <Key size={14} className="text-muted-foreground" />
+                {apiKeyLoading ? (
+                  <span className="text-xs text-muted-foreground">
+                    Checking...
+                  </span>
+                ) : (
+                  <span className={`text-xs flex items-center gap-1 ${
+                    hasStoredApiKey 
+                      ? 'text-green-800 dark:text-green-400' 
+                      : 'text-orange-800 dark:text-orange-400'
+                  }`}>
+                    {hasStoredApiKey ? (
+                      <>
+                        <CheckCircle size={12} />
+                        API Key
+                      </>
+                    ) : (
+                      <>
+                        <Circle size={12} />
+                        API Key
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
             </Button>
           </div>
           
@@ -4247,10 +4251,10 @@ export default function HomePage() {
               }}
               variant="ghost"
               size="sm"
-              className="text-gray-600 hover:text-gray-800" 
+              className="text-muted-foreground hover:text-foreground" 
               title="Settings"
             >
-              <Settings size={16} className="text-gray-600" />
+              <Settings size={16} className="text-muted-foreground" />
             </Button>
             
             {/* Settings Modal */}
@@ -4422,13 +4426,26 @@ export default function HomePage() {
                                     Current state of your API key storage and authentication
                                   </p>
                                 </div>
-                                <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${
-                  hasStoredApiKey 
-                    ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' 
-                    : 'bg-muted text-muted-foreground border border-border'
-                }`}>
-                                  {hasStoredApiKey ? '✓ Stored' : '○ Not stored'}
-                                </span>
+                                                                <Badge
+                                  variant="outline"
+                                  className={`flex-shrink-0 flex items-center gap-1 ${
+                                    hasStoredApiKey 
+                                      ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100' 
+                                      : 'text-muted-foreground border-muted-foreground/20'
+                                  }`}
+                                >
+                                  {hasStoredApiKey ? (
+                                    <>
+                                      <CheckCircle size={14} />
+                                      Stored
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Circle size={14} />
+                                      Not stored
+                                    </>
+                                  )}
+                                </Badge>
                               </div>
                               
                               {/* Details */}
@@ -4446,7 +4463,7 @@ export default function HomePage() {
                                     </div>
                                     <div className="flex justify-between items-center">
                                       <span className="min-w-0 flex-1">Storage:</span>
-                                      <span className="font-medium text-green-600 dark:text-green-400 ml-4">Encrypted on device</span>
+                                      <span className="font-medium text-primary ml-4">Encrypted on device</span>
                                     </div>
                                   </div>
                                 </div>
@@ -4481,15 +4498,18 @@ export default function HomePage() {
                             </div>
                             
                             {/* Data Encryption */}
-                            <div className="bg-green-100 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
-                              <h5 className="text-sm font-semibold text-green-800 dark:text-green-400 mb-6">Data Encryption</h5>
+                            <div className="bg-green-50 dark:bg-green-900/10 rounded-lg p-6 border border-green-200 dark:border-green-800">
+                              <h5 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-6">Data Encryption</h5>
                               <div className="flex items-center justify-between gap-4">
-                                <p className="text-xs text-green-700 dark:text-green-300">
+                                <p className="text-xs text-green-600 dark:text-green-300">
                                   All your workspace data is automatically encrypted and secure with industry-standard encryption.
                                 </p>
-                                <span className="px-3 py-1 text-sm bg-green-600 text-white rounded-md flex-shrink-0">
-                                  ✓ Active
-                                </span>
+                                <Badge 
+                                  className="bg-green-600 hover:bg-green-700 text-white flex-shrink-0 flex items-center gap-1 border-0"
+                                >
+                                  <CheckCircle size={14} />
+                                  Active
+                                </Badge>
                               </div>
                             </div>
                             
@@ -4567,13 +4587,26 @@ export default function HomePage() {
                                       Current state of your account authentication and session
                                     </p>
                                   </div>
-                                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  isAuthenticated 
-                    ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                    : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
-                }`}>
-                                    {isAuthenticated ? '✓ Authenticated' : '○ Not authenticated'}
-                                  </span>
+                                                  <Badge 
+                                                    variant="outline"
+                                                    className={`flex items-center gap-1 ${
+                                                      isAuthenticated 
+                                                        ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100' 
+                                                        : 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 hover:bg-red-100'
+                                                    }`}
+                                                  >
+                                                    {isAuthenticated ? (
+                                                      <>
+                                                        <CheckCircle size={14} />
+                                                        Authenticated
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <Circle size={14} />
+                                                        Not authenticated
+                                                      </>
+                                                    )}
+                                                  </Badge>
                                 </div>
                               </div>
                             </div>
@@ -4590,7 +4623,7 @@ export default function HomePage() {
                         <div>
                           <h4 className="text-lg font-semibold text-foreground mb-6 capitalize">{selectedSettingCategory}</h4>
                           <div className="text-center py-12">
-                            <FileText size={48} className="mx-auto text-gray-400 mb-4" />
+                            <FileText size={48} className="mx-auto text-muted-foreground mb-4" />
                             <p className="text-muted-foreground">Settings for {selectedSettingCategory} will be implemented soon.</p>
                           </div>
                         </div>
@@ -4604,10 +4637,10 @@ export default function HomePage() {
             onClick={logout}
             variant="ghost"
             size="sm"
-            className="text-gray-600 hover:text-gray-800"
+            className="text-muted-foreground hover:text-foreground"
             title="Logout"
           >
-            <LogIn size={16} className="text-gray-600" />
+            <LogIn size={16} className="text-muted-foreground" />
           </Button>
         </div>
       </div>
@@ -4617,7 +4650,7 @@ export default function HomePage() {
         {/* Project Sidebar */}
         <div 
           ref={sidebarRef}
-          className={`bg-card transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''}`}
+          className={`bg-card transition-all duration-300 relative flex-shrink-0 ${sidebarCollapsed ? 'w-12' : ''} ${isResizing ? 'bg-accent/20' : ''}`}
           style={{ width: sidebarCollapsed ? '48px' : `${sidebarWidth}px` }}
         >
                       <div className="p-4 border-b border-border flex items-center justify-between">
@@ -4642,9 +4675,9 @@ export default function HomePage() {
                 title={sidebarCollapsed ? "Expand" : "Collapse"}
               >
                 {sidebarCollapsed ? (
-                  <ChevronRight size={14} className="text-gray-600" />
+                  <ChevronRight size={14} className="text-muted-foreground" />
                 ) : (
-                  <ChevronLeft size={14} className="text-gray-600" />
+                  <ChevronLeft size={14} className="text-muted-foreground" />
                 )}
               </Button>
             </div>
@@ -4683,7 +4716,7 @@ export default function HomePage() {
                     onDragEnd={handleProjectDragEnd}
                   >
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden">
-                      <GripVertical size={12} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      <GripVertical size={12} className="text-muted-foreground mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       {project.pages && project.pages.length > 0 && (
                         <ChevronRight 
                           size={12} 
@@ -4739,10 +4772,10 @@ export default function HomePage() {
                       }}
                       variant="ghost"
                       size="sm"
-                      className="p-1 opacity-0 group-hover:opacity-100 bg-green-100 hover:bg-green-200 dark:bg-green-900/20 dark:hover:bg-green-900/30"
+                      className="p-1 opacity-0 group-hover:opacity-100 hover:bg-accent"
                       title="Add Page"
                     >
-                      <Plus size={12} className="text-green-600 dark:text-green-400" />
+                      <Plus size={12} className="text-primary" />
                     </Button>
                   </div>
                   
@@ -4885,8 +4918,8 @@ export default function HomePage() {
                             }}
                             onDragEnd={handlePageDragEnd}
                           >
-                            <GripVertical size={10} className="text-gray-400 mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                            <FileText size={12} className="text-gray-400 mr-2 flex-shrink-0" />
+                                                  <GripVertical size={10} className="text-muted-foreground mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      <FileText size={12} className="text-muted-foreground mr-2 flex-shrink-0" />
                             {editingItem.type === 'page' && editingItem.id.projectId === project.id && editingItem.id.pageId === page.id ? (
                               <input
                                 type="text"
@@ -4971,16 +5004,17 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Resize Handle */}
+          {/* Dynamic Resize Handle - Thin line that expands to thick bar on hover */}
           {!sidebarCollapsed && (
-            <div
-              className="absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors z-10 bg-gray-200"
+            <div 
+              className="absolute top-0 right-0 h-full cursor-col-resize z-10 group transition-all duration-200"
               onMouseDown={handleMouseDown}
-              style={{ 
-                cursor: isResizing ? 'col-resize' : 'col-resize',
-                background: isResizing ? '#3B82F6' : '#e5e7eb'
-              }}
-            />
+            >
+              {/* Compact hover area - just a little wider than the separator */}
+              <div className="absolute top-0 right-0 w-1.5 h-full group-hover:bg-primary/5 transition-colors" />
+              {/* Dynamic resize handle that expands on hover */}
+              <div className="absolute top-0 right-0 w-1 h-full bg-border group-hover:w-1.5 group-hover:bg-primary/50 active:bg-primary transition-all duration-200" />
+            </div>
           )}
         </div>
 
@@ -5100,10 +5134,10 @@ export default function HomePage() {
                           }}
                           variant="ghost"
                           size="sm"
-                          className="ml-2 p-1 opacity-0 group-hover:opacity-100 bg-red-100 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 flex-shrink-0"
+                          className="ml-2 p-1 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
                           title="Close Tab"
                         >
-                          <X size={10} className="text-red-600 dark:text-red-400" />
+                          <X size={10} className="text-destructive" />
                         </Button>
                       )}
                       {tab.locked && (
@@ -5182,7 +5216,7 @@ export default function HomePage() {
                             onClick={async () => {
                               if (!isDropdownDragging) {
                                 await selectTab(tab.id);
-                                console.log('🚫 Tab click: Closing tab dropdown after selecting tab:', tab.id);
+                                console.log('Tab click: Closing tab dropdown after selecting tab:', tab.id);
                                 debugSetShowTabDropdown(false);
                               }
                             }}
@@ -5242,7 +5276,7 @@ export default function HomePage() {
                                 className={`ml-2 p-1 hover:bg-destructive/10 hover:text-destructive ${deletingTabs.has(tab.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title={deletingTabs.has(tab.id) ? "Deleting..." : "Close Tab"}
                               >
-                                <X size={10} className="text-gray-500" />
+                                <X size={10} className="text-muted-foreground" />
                               </Button>
                             )}
                             {tab.locked && (
@@ -5282,7 +5316,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <Key size={64} className="mx-auto mb-4 text-gray-400" />
+                      <Key size={64} className="mx-auto mb-4 text-muted-foreground" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">No projects yet</h3>
                 <p className="text-muted-foreground">Create your first project and its page to start</p>
                     </div>
@@ -5298,7 +5332,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <FileText size={64} className="mx-auto mb-4 text-gray-400" />
+                      <FileText size={64} className="mx-auto mb-4 text-muted-foreground" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">No pages yet</h3>
                 <p className="text-muted-foreground">Add a page to your project to create tabs</p>
                     </div>
@@ -5311,7 +5345,7 @@ export default function HomePage() {
                 return (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <FileText size={64} className="mx-auto mb-4 text-gray-400" />
+                      <FileText size={64} className="mx-auto mb-4 text-muted-foreground" />
                                       <h3 className="text-lg font-semibold text-foreground mb-2">Select a page</h3>
                 <p className="text-muted-foreground">Choose a page from the sidebar to manage tabs</p>
                     </div>
@@ -5326,7 +5360,7 @@ export default function HomePage() {
                                   <div className="bg-card rounded-lg shadow-sm border border-border p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-foreground flex items-center space-x-2">
-                  <FileText size={16} className="text-gray-600" />
+                  <FileText size={16} className="text-muted-foreground" />
                   <span>{activeTabForDisplay?.name || 'Welcome'}</span>
                 </h2>
                 <Select 
@@ -6846,7 +6880,7 @@ export default function HomePage() {
                                   };
                                   await workspaceStateService.saveTabDataImmediately(activeTabForDisplay.id, 'seismic', seismicResultsDelta);
                                 } catch (error) {
-                                  console.error('❌ Error saving seismic results:', error);
+                                  console.error('Error saving seismic results:', error);
                                   // Don't show error to user as this is background save - the UI is already working
                                 }
                                 
@@ -6914,7 +6948,7 @@ export default function HomePage() {
                                   seismicResults: {}  // Explicitly clear seismic results
                                 };
                                 await workspaceApiService.replaceTabDataSmart(activeTabForDisplay.id, emptyData);
-                                console.log('✅ Seismic data and results completely cleared from database');
+                                console.log('Seismic data and results completely cleared from database');
                                 
                                 // Immediately update the tab's mergedData to reflect the cleared state
                                 setProjects(prevProjects => prevProjects.map(project => ({
@@ -7160,7 +7194,7 @@ export default function HomePage() {
                   </Button>
                 )}
               
-              <div className="border-t border-gray-200 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               
               <Button
                 onClick={() => handleContextMenuAction('newTabRight')}
@@ -7197,7 +7231,7 @@ export default function HomePage() {
                 );
               })()}
               
-              <div className="border-t border-gray-200 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               
               <Button
                 onClick={() => handleContextMenuAction('resetToTemplate')}
@@ -7208,7 +7242,7 @@ export default function HomePage() {
                 <span>Reset to Template</span>
               </Button>
               
-              <div className="border-t border-gray-200 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               
               <Button
                 onClick={() => handleContextMenuAction('moveToStart')}
@@ -7228,7 +7262,7 @@ export default function HomePage() {
                 <span>Move to End</span>
               </Button>
               
-              <div className="border-t border-gray-200 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               
               <Button
                 onClick={() => handleContextMenuAction('closeOthers')}
@@ -7271,12 +7305,12 @@ export default function HomePage() {
                 <span>Close All Tabs</span>
               </Button>
               
-              <div className="border-t border-gray-200 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               
               <Button
                 onClick={() => handleContextMenuAction('closeThisTab')}
                 variant="ghost"
-                className="w-full justify-start px-4 py-2 h-auto hover:bg-red-100 text-red-600"
+                className="w-full justify-start px-4 py-2 h-auto hover:bg-destructive/10 text-destructive"
               >
                 <X size={14} />
                 <span>Close this tab</span>
@@ -7289,38 +7323,20 @@ export default function HomePage() {
 
       {/* Security Info Modal */}
       {showSecurityInfoModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <Dialog open={showSecurityInfoModal} onOpenChange={setShowSecurityInfoModal}>
+          <DialogContent className="max-w-md flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Info size={20} className="text-primary mr-2" />
                 API Key Security
-              </h3>
-              <Button
-                onClick={() => setShowSecurityInfoModal(false)}
-                variant="ghost"
-                size="sm"
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </Button>
-            </div>
+              </DialogTitle>
+            </DialogHeader>
             
-            <div className="flex items-center mb-4">
-                            <Info size={20} className="text-blue-500 mr-3 flex-shrink-0" />
-              <div className="text-gray-700 flex-1">
-                <h4 className="font-semibold mb-2 text-gray-800">How we protect your API key:</h4>
-                <ul className="list-disc list-inside space-y-1 text-sm">
+            <div className="flex items-start">
+              <Info size={20} className="text-primary mr-3 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-semibold mb-2 text-foreground">How we protect your API key:</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                   <li>Your API key is encrypted using your password</li>
                   <li>We never store your password or API key in plain text</li>
                   <li>Your key is only accessible when you're logged in</li>
@@ -7330,15 +7346,16 @@ export default function HomePage() {
               </div>
             </div>
             
-            <div className="flex justify-center">
+            <DialogFooter>
               <Button
                 onClick={() => setShowSecurityInfoModal(false)}
+                variant="default"
               >
                 OK
               </Button>
-            </div>
-          </div>
-        </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Store API Key Modal */}
@@ -7643,19 +7660,19 @@ export default function HomePage() {
               ? 'bg-green-50 border-green-200 text-green-800' 
               : toastType === 'info'
               ? 'bg-blue-50 border-blue-200 text-blue-800'
-              : 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-destructive/10 border-destructive/20 text-destructive'
           }`}>
             {toastType === 'success' ? (
-              <CheckCircle size={20} className="flex-shrink-0" />
+              <CheckCircle size={20} className="text-green-600 flex-shrink-0" />
             ) : toastType === 'info' ? (
-              <Info size={20} className="flex-shrink-0" />
+              <Info size={20} className="text-blue-600 flex-shrink-0" />
             ) : (
-              <X size={20} className="flex-shrink-0" />
+              <X size={20} className="text-destructive flex-shrink-0" />
             )}
             <span className="text-sm font-medium">{toastMessage}</span>
             <button
               onClick={() => setShowToast(false)}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-muted-foreground hover:text-foreground transition"
             >
               <X size={16} />
             </button>

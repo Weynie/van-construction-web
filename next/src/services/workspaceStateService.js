@@ -153,7 +153,7 @@ export const workspaceStateService = {
                           needsPassword: false
                         };
                       } catch (decryptError) {
-                        console.warn(`❌ Failed to decrypt tab ${tab.name}:`, decryptError.message);
+                        console.warn(`Failed to decrypt tab ${tab.name}:`, decryptError.message);
                         // Fall back to template defaults if decryption fails
                         const templateData = tabTemplateService.getTemplate(tab.tabType || tab.type);
                         return {
@@ -215,7 +215,7 @@ export const workspaceStateService = {
       })
     );
 
-    console.log('🎉 Workspace data processing completed');
+    console.log('Workspace data processing completed');
     return { projects: processedProjects };
   },
 
@@ -627,11 +627,11 @@ export const workspaceStateService = {
    */
   async deleteTab(tabId) {
     const realId = this.getRealId(tabId);
-    console.log('🎯 StateService: deleteTab called for:', realId);
+    console.log('StateService: deleteTab called for:', realId);
     
     // Check if this tab is already being deleted
     if (this.pendingChanges.has(`delete_${realId}`)) {
-      console.warn('⚠️ Tab deletion already in progress:', realId);
+              console.warn('Tab deletion already in progress:', realId);
       return;
     }
     
@@ -668,7 +668,7 @@ export const workspaceStateService = {
         throw error;
       } else {
         // Tab not found is OK - it might have been deleted already
-        console.warn('✅ StateService: Tab already deleted (graceful):', realId);
+        console.warn('StateService: Tab already deleted (graceful):', realId);
         this.notifyListeners({
           type: 'TAB_DELETED',
           tabId: realId
@@ -677,7 +677,7 @@ export const workspaceStateService = {
     } finally {
       // Clean up the pending deletion flag
       this.pendingChanges.delete(`delete_${realId}`);
-      console.log('🧹 StateService: Cleaned up pending deletion for:', realId);
+      console.log('StateService: Cleaned up pending deletion for:', realId);
     }
   },
 
