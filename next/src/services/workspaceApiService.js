@@ -335,11 +335,11 @@ export const workspaceApiService = {
         headers: this.getAuthHeaders(),
       });
       
-      console.log('📡 API: DELETE response status:', response.status, 'for tab:', tabId);
+      console.log('API: DELETE response status:', response.status, 'for tab:', tabId);
       
       return await this.handleResponse(response);
     } catch (error) {
-      console.error('🚨 API: Error deleting tab:', tabId, error);
+      console.error('API: Error deleting tab:', tabId, error);
       throw error;
     }
   },

@@ -644,7 +644,7 @@ export const workspaceStateService = {
       type: 'TAB_DELETED_OPTIMISTIC',
       tabId: realId
     });
-    console.log('📢 StateService: Sent TAB_DELETED_OPTIMISTIC for:', realId);
+          console.log('StateService: Sent TAB_DELETED_OPTIMISTIC for:', realId);
 
     try {
       await workspaceApiService.deleteTab(realId);
@@ -654,9 +654,9 @@ export const workspaceStateService = {
         type: 'TAB_DELETED',
         tabId: realId
       });
-      console.log('📢 StateService: Sent TAB_DELETED for:', realId);
+      console.log('StateService: Sent TAB_DELETED for:', realId);
     } catch (error) {
-      console.log('🚨 StateService: API deletion failed for:', realId, error.message);
+      console.log('StateService: API deletion failed for:', realId, error.message);
       // Rollback optimistic update only if it's not a "Tab not found" error
       if (!error.message.includes('Tab not found')) {
         console.log('StateService: Rolling back optimistic update for:', realId);

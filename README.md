@@ -4,15 +4,55 @@
 
 ## Overview
 
-Construction Web is a comprehensive web application designed for construction engineering analysis in Metro Vancouver, featuring hierarchical project organization, real-time synchronization, and specialized calculation tools for structural engineering workflows.
+Construction Web is a **full-stack integration platform** designed for construction engineering analysis in Metro Vancouver, featuring **Java Spring Boot** and **Python Flask** microservices intergration, **PostgreSQL database management**, **RESTful API development**, and **production monitoring** for complex engineering workflows.
 
 ## Key Features
 
-- **Engineering Calculators**: Wind load, snow load, and seismic hazard analysis tools
 - **Delta Storage System**: Instant tab creation with template-based architecture and minimal database footprint
-- **Advanced Tab Management**: Copy, paste, drag, lock, and bulk operations across projects and pages
+- **Database Management**: **PostgreSQL** with **complex SQL queries**, **JPA/Hibernate ORM**, and **performance optimization**
+- **API Integration**: **RESTful APIs** with **GraphQL** external service integration and **real-time data synchronization**
 - **Debounced Auto-Save**: 1-second auto-save with optimistic updates and background sync
+- **Production Monitoring**: **Spring Boot Actuator**, **Docker health checks**, and **comprehensive logging**
+- **Advanced Tab Management**: Copy, paste, drag, lock, and bulk operations across projects and pages
 - **Professional UI/UX**: Dark/light themes, responsive design, and accessibility features
+
+## Tech Stack
+
+### Backend Services 
+- **Java Spring Boot** - Main application server with **JWT authentication** and **microservice coordination**
+- **Python Flask** - Specialized calculation microservice with **RESTful endpoints**
+- **PostgreSQL** - Production database with **complex queries**, **JPA/Hibernate**, and **performance optimization**
+- **Spring Security** - **Role-based access control** with **BCrypt password encryption**
+- **Maven** - Build automation and dependency management
+
+### Database & SQL Operations
+- **PostgreSQL 15** with **advanced indexing** and **query optimization**
+- **JPA/Hibernate** - Object-relational mapping and **complex data relationships**
+- **Delta-based Updates** - **90% database load reduction** through intelligent change detection
+- **Connection Pooling** - **HikariCP** for optimal performance and **health monitoring**
+
+### Integration & APIs
+- **RESTful APIs** - Comprehensive **validation**, **error handling**, and **security**
+- **GraphQL Integration** - External seismic data API with **real-time queries**
+- **External API Integration** - **OpenCage Geocoding** and **Natural Resources Canada** services
+- **JWT (JSON Web Tokens)** - Stateless authentication with **24-hour token expiration**
+
+### DevOps & Infrastructure
+- **Docker** containerization with **docker-compose orchestration**
+- **Health Monitoring** - **Spring Boot Actuator** with **/actuator/health** endpoints
+- **Service Discovery** - Automated startup sequence and **dependency management**
+- **Environment Configuration** - Development and production deployment management
+
+### Frontend Interface
+- **React 18** with **JavaScript** for real-time data visualization
+- **Tailwind CSS V3** + **shadcn/ui** for modern, accessible components
+- **Custom Hooks** for state management and performance optimization
+- **React DnD** for drag-and-drop functionality
+
+## Engineering Applications
+
+- **Seismic Analysis**: **Location-based requests** with **real-time API integration**
+- **Wind Load & Snow Load Calculations**: **Parameter processing** with **automated detailed result generation**
 
 ## Application Screenshots
 
@@ -39,44 +79,6 @@ Advanced soil classification system with probability-based analysis, color-coded
 **Application Settings - Security Management**
 ![Application Settings](screenshots/settings-security-dark.png)
 Centralized security dashboard featuring encrypted API key management, data encryption status, and comprehensive user preference controls.
-
-
-## Engineering Calculations
-
-- **Seismic Analysis**: Location-based hazard assessment with professional reporting
-- **Wind Load Calculations**: Real-time parameter adjustment with comprehensive results
-- **Snow Load Analysis**: Slope adjustments and detailed structural design parameters
-
-## Tech Stack
-
-### Frontend
-- **React 18** with TypeScript for type-safe development
-- **Tailwind CSS V3** + **shadcn/ui** for modern, accessible components
-- **Custom Hooks** for state management and performance optimization
-- **React DnD** for drag-and-drop functionality
-
-### Backend
-- **Spring Boot** (Java) - Main application server with JWT authentication
-- **Flask** (Python) - Microservice for seismic calculations
-- **PostgreSQL** - Primary database with encryption at rest
-- **RESTful APIs** with comprehensive validation and security
-
-### DevOps & Infrastructure
-- **Docker** containerization with docker-compose orchestration
-- **JWT Authentication** with role-based access control
-- **Microservices Architecture** with service discovery
-- **Environment-based Configuration** for development and production
-
-
-## Technical Achievements
-
-- **Delta Storage System Innovation**: Template-based system storing complete forms in React with only user changes persisted to database,
- reducing database load by 90% while enabling instant tab creation
-- **Complex State Orchestration**: Built custom React hooks managing hierarchical workspace data with optimistic updates
-- **Advanced Tab Management**: Implemented full suite of tab management including cut/copy/paste, drag & drop, locking, bulk operations, and cross-page movement
-- **Microservice Integration**: Seamlessly connected Java and Python services. Spring Boot for user management, Flask for calculations with real-time data synchronization
-- **Auto-Save Architecture**: Developed 1-second debounced auto-save system with immediate UI feedback and background sync
-- **Production Security**: Implemented end-to-end AES-GCM 256-bit encryption for sensitive engineering data
 
 
 ## Quick Start
